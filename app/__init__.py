@@ -4,7 +4,7 @@ from flask_cors import CORS
 from mongoengine import *
 from flask_jwt_extended import JWTManager
 from mongoengine import document
-from mongoengine.connection import connect
+from mongoengine import connect
 
 # Logger config
 logging.basicConfig(level=logging.DEBUG)
@@ -12,7 +12,8 @@ logging.basicConfig(level=logging.DEBUG)
 app = Flask(__name__)
 
 # Configuration
-app.config.from_object('config.DevelopmentConfig')
+app.config.from_object('config.ProductionConfig')
+# print(app.config['MONGO_URI'])
 
 # DB connection
 connect(host = app.config['MONGO_URI'])

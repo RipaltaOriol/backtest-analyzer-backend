@@ -25,14 +25,13 @@ def signup():
   # Receiving data
   email = request.json['email']
   password = request.json['password']
-
+  print('Request received')
   if email and password:
     hashed_password = generate_password_hash(password)
     user = User(
       email = email,
       password = hashed_password
     )
-    
     try:
       user = user.save()
       token_id = json.loads(json_util.dumps(user.id))

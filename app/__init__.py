@@ -12,6 +12,7 @@ logging.basicConfig(level=logging.DEBUG)
 app = Flask(__name__)
 
 # Configuration
+app.secret_key = 'secret-backtest-analyzer'
 app.config.from_object('config.ProductionConfig')
 # print(app.config['MONGO_URI'])
 

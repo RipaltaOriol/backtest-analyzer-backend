@@ -19,7 +19,6 @@ class ProductionConfig(Config):
 
 class DevelopmentConfig(Config):
   # Connect to the database
-  # MONGO_URI = 'mongodb+srv://appadmin0:backtestanalyzer@clusterbeta.xm49b.mongodb.net/myFirstDatabase?retryWrites=true&w=majority'
   MONGO_URI = 'mongodb://localhost/backtest-analyzer'
   # JWT config
   JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=24)

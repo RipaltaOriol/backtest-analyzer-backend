@@ -13,6 +13,8 @@ def prettify_table(df):
       new_columns.append(new_name)
     elif '.p' == column:
       new_columns.append('Pair')
+    elif '.s' == column:
+      new_columns.append('Screenshot')
     else:
       new_columns.append(column)
 
@@ -28,18 +30,18 @@ def get_statistics(df):
   for c in list(df.columns):
     if '.r_' in c:
       # calcultaions
-      total = df[c].sum()
-      mean = df[c].mean()
-      count = df[c].count()
+      total = round(df[c].sum(), 2)
+      mean = round(df[c].mean(), 2)
+      count = round(df[c].count(), 2)
       winners = len(df[(df[c] > 0)])
       lossers = len(df[(df[c] < 0)])
       evens = len(df[(df[c] == 0)])
       df_win = df.loc[(df[c] > 0)]
       df_loss = df.loc[(df[c] < 0)]
-      average_win = df_win[c].mean()
-      average_loss = df_loss[c].mean()
-      win_rate = winners / count
-      expected_result = (average_win * (winners / count)) + (average_loss * (lossers / count))
+      average_win = round(df_win[c].mean(), 2)
+      average_loss = round(df_loss[c].mean(), 2)
+      win_rate = round(winners / count, 2)
+      expected_result = round((average_win * (winners / count)) + (average_loss * (lossers / count)), 2)
       # creating the new column
       column_name = c.replace('.r_', '')
       new_column = [total, mean, count, win_rate, winners, lossers, evens, average_win, average_loss, expected_result]

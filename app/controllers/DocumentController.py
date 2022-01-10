@@ -32,11 +32,13 @@ def get_document(id):
   df = pd.read_csv(path)
   df_stats = get_statistics(df)
   df = prettify_table(df)
-  df_json = df.to_json(orient='split')
+  df_json = df.to_json(orient='records')
   df_stats_json = df_stats.to_json(orient='split')
+  print(type(df.dtypes))
   response = jsonify({
     'table': df_json,
-    'stats': df_stats_json
+    'stats': df_stats_json,
+    'columns': list(df.columns)
   })
   return response
 

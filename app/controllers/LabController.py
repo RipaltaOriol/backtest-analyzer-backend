@@ -21,7 +21,10 @@ def create_lab():
   file_id = request.json.get('file', None)
   user = User.objects(id = id['$oid']).get()
   file = Document.objects(id = file_id).get()
-  lab = Lab(name = name, author = user,  documentId = file).save()
+  path = os.path.join(app.root_path, app.config['UPLOAD_FOLDER'], file.title)
+  df = pd.read_csv(path)
+  df = df.to_json(orient='split')
+  lab = Lab(name = name, author = user,  documentId = file, state = df).save()
   return Response(lab.to_json(), mimetype='application/json')
 
 def get_lab(id):
@@ -40,12 +43,14 @@ def get_lab(id):
   df = pd.read_json(state, orient='split')
   df_stats = get_statistics(df)
   df = prettify_table(df)
-  df_json = df.to_json(orient='split')
+  df_json = df.to_json(orient='records')
   df_stats_json = df_stats.to_json(orient='split')
   response = jsonify({
     'table': df_json,
     'stats': df_stats_json,
-    'filters': lab.filters
+    'filters': lab.filters,
+    'columns': list(df.columns),
+    'notes': lab.notes
   })
   return response
 
@@ -64,6 +69,8 @@ def get_labs():
   return response
 
 def get_filter(id):
+  print(id)
+  print(type(id))
   lab = Lab.objects(id = id).first()
   df = pd.read_json(lab.state, orient='split')
   columns = get_columns(df)
@@ -103,11 +110,18 @@ def put_filter(id):
   lab.update(filters = lab.filters, state = new_state)
   df_stats = get_statistics(df)
   df = prettify_table(df)
-  df_json = df.to_json(orient='split')
+  df_json = df.to_json(orient='records')
   df_stats_json = df_stats.to_json(orient='split')
   response = jsonify({
     'table': df_json,
     'stats': df_stats_json,
-    'filters': lab.filters
+    'filters': lab.filters,
+    'columns': list(df.columns)
   })
   return response
+
+def patch_note(id):
+  note = request.json.get('note', '')
+  lab = Lab.objects(id = id).first()
+  lab.modify(notes = note)
+  return lab.notes

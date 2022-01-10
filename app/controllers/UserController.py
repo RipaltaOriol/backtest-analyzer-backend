@@ -7,6 +7,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from bson import json_util
 from bson.objectid import ObjectId
 from app.models.User import User
+from app.controllers.ErrorController import handle_401
 
 def login():
   email = request.json.get('email', None)
@@ -15,7 +16,7 @@ def login():
   # FIX: if nothing is found then respond something
   is_match = check_password_hash(user.password, password)
   if not is_match:
-      return jsonify({'msg': 'Bad username or password'}), 401
+      return handle_401()
 
   token_id = json.loads(json_util.dumps(user.id))
   access_token = create_access_token(identity = token_id)

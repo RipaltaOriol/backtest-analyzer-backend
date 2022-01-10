@@ -7,8 +7,9 @@ from app.models.Document import Document
 
 class Lab(DynamicDocument):
   name = StringField(default = 'undefined')
-  state = DictField()
+  state = StringField()
   filters = ListField()
+  notes = StringField(default = '')
   author = ReferenceField(User)
   documentId = ReferenceField(Document)
   date_created = DateField(default = datetime.utcnow)

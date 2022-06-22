@@ -13,18 +13,25 @@ from app.models.User import User
 from app.controllers.FilterController import apply_filter
 from app.controllers.FileController import get_statistics, prettify_table, get_columns
 
+# this is a test route and should be deleted in production
+def test():
+  response = jsonify({'msg': 'Hello World'})
+  return response
+
 def create_lab():
+  print('It gets here')
   id = get_jwt_identity()
+  print(id)
   name = request.json.get('name', None)
   if name == '':
     name = 'undefined'
   file_id = request.json.get('file', None)
   user = User.objects(id = id['$oid']).get()
   file = Document.objects(id = file_id).get()
-  path = os.path.join(app.root_path, app.config['UPLOAD_FOLDER'], file.title)
-  df = pd.read_csv(path)
-  df = df.to_json(orient='split')
-  lab = Lab(name = name, author = user,  documentId = file, state = df).save()
+  # path = os.path.join(app.root_path, app.config['UPLOAD_FOLDER'], file.title)
+  # df = pd.read_csv(path)
+  # df = df.to_json(orient='split')
+  lab = Lab(name = name, author = user,  documentId = file).save()
   return Response(lab.to_json(), mimetype='application/json')
 
 def get_lab(id):
@@ -69,8 +76,6 @@ def get_labs():
   return response
 
 def get_filter(id):
-  print(id)
-  print(type(id))
   lab = Lab.objects(id = id).first()
   df = pd.read_json(lab.state, orient='split')
   columns = get_columns(df)

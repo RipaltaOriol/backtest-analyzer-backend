@@ -23,9 +23,9 @@ def prettify_table(df):
 
 def get_statistics(df):
   # NOTE: try making the index a column and then convert it to the index
-  df.dropna(inplace=True)
+  # df.dropna(inplace=True)
   data = {}
-  row_indexes = ['Total', 'Mean', 'Count', 'Win-Rate', 'Wins', 'Losses', 'Break-Even', 'Average Win', 'Average Loss', 'Expected Result']
+  row_indexes = ['Total', 'Mean', 'Count', 'Win-Rate', 'Wins', 'Losses', 'Break-Even', 'Average Win', 'Average Loss', 'Expected Result', 'Drawdown']
   df_stats = pd.DataFrame(data, index = row_indexes)
   for c in list(df.columns):
     if '.r_' in c:
@@ -42,9 +42,16 @@ def get_statistics(df):
       average_loss = round(df_loss[c].mean(), 2)
       win_rate = round(winners / count, 2)
       expected_result = round((average_win * (winners / count)) + (average_loss * (lossers / count)), 2)
+      cumulative = c + ' Cumulative'
+      high_value = c + ' HV'
+      drawdown = c + ' Drawdown'
+      df[cumulative] = df[c].cumsum().round(2)
+      df[high_value] = df[cumulative].cummax()
+      df[drawdown] = df[cumulative] - df[high_value]
+      drawdown = df[drawdown].min().round(2)
       # creating the new column
       column_name = c.replace('.r_', '')
-      new_column = [total, mean, count, win_rate, winners, lossers, evens, average_win, average_loss, expected_result]
+      new_column = [total, mean, count, win_rate, winners, lossers, evens, average_win, average_loss, expected_result, drawdown]
       df_stats[column_name] = new_column
   # add index and re-order columns
   df_stats[''] = df_stats.index

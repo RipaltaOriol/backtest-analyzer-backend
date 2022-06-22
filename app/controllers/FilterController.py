@@ -25,12 +25,14 @@ def apply_filter(df, filter, action, value):
   return df
 
 def filter_numeric_include(field, value, df):
+  value = value.split(',')
   items = np.array(value)
   items = items.astype(np.float)
   df_filter = df[df[field].isin(items)]
   return df_filter
 
 def filter_numeric_exclude(field, value, df):
+  value = value.split(',')
   items = np.array(value)
   items = items.astype(np.float)
   df_filter = df[-df[field].isin(items)]

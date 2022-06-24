@@ -44,6 +44,7 @@ def get_setup(document_id, setup_id):
     return Response(setup.to_json(), mimetype='application/json')
 
 """ Creates A New Setup
+    NOTE: fix issues
 """
 def post_setup(document_id):
     id = get_jwt_identity()

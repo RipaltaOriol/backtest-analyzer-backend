@@ -1,6 +1,5 @@
 import os
 import shutil
-import pandas as pd
 
 from app import app
 from flask import request, jsonify
@@ -23,32 +22,11 @@ def get_documents():
     document = {
       'id': str(file.id),
       'name': file.title,
-      'date': file.date_created #.isoformat()
+      'date': file.date_created
     }
     documents.append(document)
   response = jsonify(documents)
   return response
-
-""" Retrieves One Docment
-    NOTE: missing authorization to checkif file corresponds to user
-    NOTE: endpoint not working (under construction)
-"""
-def get_document(file_id):
-  # file = Document.objects(id = file_id).get()
-
-  # path = os.path.join(app.root_path, app.config['UPLOAD_FOLDER'], file.title)
-  # df = pd.read_csv(path)
-  # df_stats = get_statistics(df)
-  # df = prettify_table(df)
-  # df_json = df.to_json(orient='records')
-  # df_stats_json = df_stats.to_json(orient='split')
-  # response = jsonify({
-  #   'table': df_json,
-  #   'stats': df_stats_json,
-  #   'columns': list(df.columns)
-  # })
-  # return response
-  return 'Under Construction'
 
 """ Clone Doucment
 """
@@ -161,7 +139,6 @@ def clone_document(file_id):
     default = True
   )
   setup.save()
-
   return jsonify({'msg': 'Document successfully copied', 'success': True})
 
 
@@ -186,4 +163,3 @@ def delete_document(file_id):
     return jsonify({'msg': 'Document successfully deleted', 'success': True})
   else:
     return jsonify({'msg': 'Document does not exist', 'success': False})
-  return 'Hello'

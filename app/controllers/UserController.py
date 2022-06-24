@@ -1,6 +1,5 @@
 import json
 
-from os import abort
 from bson import json_util
 from flask import request, jsonify
 from mongoengine.errors import NotUniqueError
@@ -18,10 +17,8 @@ def login():
   email = request.json.get('email', None)
   password = request.json.get('password', None)
   user = User.objects(email = email).first()
-  print('Here:')
   if user == None:
     return handle_403(msg = 'Incorrect email or password')
-  # FIX: if nothing is found then respond something
   is_match = check_password_hash(user.password, password)
   if not is_match:
       return handle_403(msg = 'Incorrect email or password')
@@ -39,12 +36,11 @@ def login():
   return response
 
 """ Signup User
-    NOTE: currently not working
 """
 def signup():
   # Receiving data
-  email = request.json['email']
-  password = request.json['password']
+  email = request.json.get('email', None)
+  password = request.json.get('password', None)
   if email and password:
     hashed_password = generate_password_hash(password)
     user = User(
@@ -53,11 +49,22 @@ def signup():
     )
     try:
       user = user.save()
-      token_id = json.loads(json_util.dumps(user.id))
-      access_token = create_access_token(identity = token_id)
-      return jsonify(access_token=access_token)
+      user_id = json.loads(json_util.dumps(user.id))
+      access_token = create_access_token(identity = user_id)
+      refresh_token = create_refresh_token(identity = user_id)
+      response = jsonify({
+        'user': user_id['$oid'],
+        'msg': 'Login successful',
+        'access_token': access_token,
+        'success': True
+      })
+      set_refresh_cookies(response, refresh_token)
+      return response
     except NotUniqueError:
-      abort(404)
+      return handle_403(msg = 'Something went wrong')
+  else:
+    return handle_401(msg = 'Missing email or password')
+
 
 """ Logouut User
 """

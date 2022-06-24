@@ -6,7 +6,6 @@ class Config(object):
   UPLOAD_FOLDER = 'uploads'
   # Debug & Testing
   DEBUG = False
-  DEBUG = False
   # Session secret
   SESSION_TYPE = 'filesystem'
   # JWT secret
@@ -14,6 +13,7 @@ class Config(object):
 
 class ProductionConfig(Config):
   # Connect to the database
+  DEBUG = True
   MONGO_URI = 'mongodb+srv://appadmin0:backtestanalyzer@clusterbeta.xm49b.mongodb.net/backtest-analyzer?retryWrites=true&w=majority&ssl=true&ssl_cert_reqs=CERT_NONE'
   pass
 

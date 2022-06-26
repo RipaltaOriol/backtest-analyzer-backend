@@ -9,7 +9,6 @@ from flask_jwt_extended import get_jwt_identity
 from app.models.User import User
 from app.models.Setup import Setup
 from app.models.Document import Document
-from app.controllers.FileController import get_statistics, prettify_table
 
 """ Retrieves All Documents
 """

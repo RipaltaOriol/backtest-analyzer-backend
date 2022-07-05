@@ -1,7 +1,8 @@
+import json
 from datetime import datetime
 from bson.json_util import default, dumps
 from mongoengine.document import DynamicDocument
-from mongoengine.fields import DateTimeField, BooleanField, ListField, ReferenceField, StringField
+from mongoengine.fields import DateTimeField, BooleanField, ListField, ReferenceField, StringField, DictField
 
 from app.models.User import User
 from app.models.Document import Document
@@ -11,7 +12,7 @@ class Setup(DynamicDocument):
     name = StringField(default = 'undefined')
     default = BooleanField()
     filters = ListField(ReferenceField(Filter), default = [])
-    state = StringField()
+    state = DictField()
     notes = StringField(default = '')
     author = ReferenceField(User)
     documentId = ReferenceField(Document)
@@ -21,7 +22,10 @@ class Setup(DynamicDocument):
         data = self.to_mongo()
         # gets the Filter data instead of just the ID
         for i in range(len(data['filters'])):
-            data['filters'][i]= self.filters[i].to_mongo()
+            data['filters'][i]= {
+                'id': self.filters[i].id,
+                'name': self.filters[i].name
+            }
         return dumps(data)
 
     meta = {

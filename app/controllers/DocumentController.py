@@ -59,7 +59,6 @@ def post_document():
   user = User.objects(id = id['$oid']).get()
   # get target directory
   target = os.path.join(app.root_path, app.config['UPLOAD_FOLDER'], str(user.id))
-  print(target)
   # create one if it does not exist
   if not os.path.isdir(target):
     os.mkdir(target)

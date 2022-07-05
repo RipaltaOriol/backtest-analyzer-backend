@@ -14,8 +14,8 @@ app = Flask(__name__)
 
 # Configuration
 app.secret_key = 'secret-backtest-analyzer'
-app.config.from_object('config.ProductionConfig')
-# app.config.from_object('config.DevelopmentConfig')
+# app.config.from_object('config.ProductionConfig')
+app.config.from_object('config.DevelopmentConfig')
 
 app.config["JWT_TOKEN_LOCATION"] = ["headers", "cookies"]
 app.config["JWT_COOKIE_SECURE"] = False
@@ -31,16 +31,11 @@ connect(host = app.config['MONGO_URI'])
 jwt = JWTManager(app)
 CORS(app)
 
-from app.controllers import UserController
-from app.controllers import DocumentController
-from app.controllers import SetupController
-from app.controllers import FilterController
 from app.routes.document_bp import document_bp
 from app.routes.setup_bp import setup_bp
 from app.routes.filter_bp import filter_bp
 from app.routes.auth_bp import auth_bp
 from app.routes.error_bp import error_bp
-
 
 # JWT Custom Behaviour
 @jwt.expired_token_loader

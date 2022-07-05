@@ -1,9 +1,9 @@
 import os
+import json
 from app import app
 import pandas as pd
 from flask import request, jsonify
 from flask.wrappers import Response
-from flask_jwt_extended import get_jwt_identity
 
 from app.models.Setup import Setup
 from app.models.Filter import Filter
@@ -32,34 +32,65 @@ def apply_filter(df, column, operation, value):
   
   return df
 
+""" Generates filter name
+"""
+def get_filter_name(column, operation, value):
+  # initialise the name variable
+  name = ''
+  # get the column
+  if column.startswith('.p'):
+    name += 'Pair'
+  else:
+    name += column[3:]
+  if operation == 'gt':
+    name += ' greater than '
+  elif operation == 'lt':
+    name += ' lesser than '
+  elif operation == 'eq':
+    name += ' equal to '
+  elif operation == 'ne':
+    name += ' not equal to '
+  elif operation == 'in':
+    name += ' includes '
+  elif operation == 'nin':
+    name += ' not includs '
+  # attach values
+  values = ','.join(str(v) for v in value)
+  name += values
+  return name
+
 """ Adds a Filter to a Setup
 """
 def post_filter(setup_id):
-  id = get_jwt_identity()
   column = request.json.get('column', None)
   operation = request.json.get('operation', None)
   value = request.json.get('value', None)
   setup = Setup.objects(id = setup_id).get()
-  data = pd.read_json(setup.state, orient='split')
+  temp = json.dumps(setup.state)
+  data = pd.read_json(temp, orient='table')
 
   if column == None or operation == None or value == None:
     return handle_403(msg = 'Filter is not valid')
 
   data = apply_filter(data, column, operation, value)
-    
-  state = data.to_json(orient='split')
-
+  name = get_filter_name(column, operation, value)
+  df = data.to_json(orient = 'table')
+  df = json.loads(df)
   filter = Filter(
+    name = name,
     column = column,
     operation = operation,
     value = value,
   ).save()
 
   setup.filters.append(filter)
-  setup.state = state
   setup.save()
+  setup.modify(state = df)
+  response = setup.to_json()
+  response = json.loads(response)
+  response = json.dumps(response)
 
-  return Response(setup.to_json(), mimetype = 'application/json')
+  return Response(response, mimetype = 'application/json')
 
 """ Adds a Filter to a Setup
 """
@@ -67,10 +98,10 @@ def delete_filter(setup_id, filter_id):
   try:
     setup = Setup.objects(id = setup_id).get()  
     filter_dlt = Filter.objects(id = filter_id).get()
+    # delete filter instance in setup
     to_dlt = filter_dlt.pk
-    
-    setup.update(pull__filters = to_dlt)
-    
+    setup.modify(pull__filters = to_dlt)
+
     # establish remaining filters
     document = Document.objects(id = setup.documentId.id).get()
     target = os.path.join(app.root_path, app.config['UPLOAD_FOLDER'], document.path)
@@ -79,11 +110,18 @@ def delete_filter(setup_id, filter_id):
     for filter in setup.filters:
       df = apply_filter(df, filter.column, filter.operation, filter.value)
 
-    df = df.to_json(orient = 'split')
-    setup.update(state = df)
+    df = df.to_json(orient = 'table')
+    df = json.loads(df)
+    setup.modify(state = df)
+
     # delete filter
     filter_dlt.delete()
-    return jsonify({'msg': 'Filter successfully deleted', 'success': True})
+
+    response = setup.to_json()
+    response = json.loads(response)
+    response = json.dumps(response)
+
+    return Response(response, mimetype = 'application/json')
     
   except:
     return handle_403(msg = 'Somethign went wrong')

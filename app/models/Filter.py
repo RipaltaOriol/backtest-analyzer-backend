@@ -3,6 +3,7 @@ from mongoengine.document import DynamicDocument
 from mongoengine.fields import StringField, DateField, ListField
 
 class Filter(DynamicDocument):
+    name = StringField()
     column = StringField()
     operation = StringField()
     value = ListField(default = list)

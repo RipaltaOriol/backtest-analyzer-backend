@@ -1,6 +1,7 @@
 import os
 import json
 from app import app
+import numpy as np
 import pandas as pd
 from flask import jsonify, request
 from flask.wrappers import Response
@@ -76,9 +77,11 @@ def put_setup(document_id, setup_id):
     id = get_jwt_identity()
     name = request.json.get('name', None)
     default = request.json.get('default', None)
+    notes = request.json.get('notes', None)
     user = User.objects(id = id['$oid']).get()
     setup = Setup.objects(id = setup_id, author = user, documentId = document_id).get()
     setup.name = name if name else setup.name
+    setup.notes = notes if notes != None else setup.notes
     if default:
         Setup.objects(author = user, documentId = document_id, id__ne = setup_id).update(default = False)
         setup.default = default
@@ -131,37 +134,42 @@ def get_graphics(document_id, setup_id):
     setup = Setup.objects(author = user, id = setup_id, documentId = document_id).get()
     temp = json.dumps(setup.state)
     data = pd.read_json(temp, orient = 'table')
-    labels = []
-    values = []
-    equity = 1000
     data.dropna(inplace = True)
-    for _, row in data.iterrows():
-        labels.append(row['#'])
-        equity = equity + equity * 0.01 * row['.r_Result']
-        values.append(equity)
+    result_names = [column for column in data.columns if column.startswith('.r_')]
 
-    # print(data['.r_Result'])
-    # look at Finance Course on how to apply simulation.
-    # test = data['.r_Result'].apply()
+    # line chart
+    equity = 1000
+    datasets = []
+    for column in result_names:
+        points = []
+        for i in range(len(data[column])):
+            if i == 0:
+                points.append(equity + equity * 0.01 * data['.r_Result'].iloc[i])
+            else:
+                points.append(points[i - 1] + points[i - 1] * 0.01 * data['.r_Result'].iloc[i])
+        datasets.append({
+            'name': column[3:],
+            'values': points
+        })
+
     line = {
-        'labels': labels,
-        'values': values
+        'name': '$' + str(equity) + ' Equity Simlutaion',
+        'labels': list(range(1, 1 + len(data[result_names[0]]))),
+        'datasets': datasets
     }
+
+    # NOTE: this can be done more effiently
     pie = {
+        'name': result_names[0][3:] + ' by Outcome Distribution',
         'labels': ['Winners', 'Break-Even', 'Lossers'],
-        'values': [3, 5, 1]
+        'values': [
+            len(data[data[result_names[0]] > 0]),
+            len(data[data[result_names[0]] == 0]),
+            len(data[data[result_names[0]] < 0])
+        ]
     }
-    bar = {
-        'labels': ['Zone Touch', 'Touch N', 'RSI', 'PMT'],
-        'datasets': [{
-            'name': 'Regular',
-            'values': [35, 23, 55, 18]
-        }, {
-            'name': '50% @ 1.0',
-            'values': [32, 45, 48, -1]
-        }]
-    }
-    response = jsonify(line = line, pie = pie, bar = bar)
+
+    response = jsonify(line = line, pie = pie)
     return response
 
 """ Gets Setup Filter Options

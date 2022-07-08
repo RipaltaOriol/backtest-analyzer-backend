@@ -1,0 +1,27 @@
+﻿#,.m_RRR,.r_Result,.r_Result 50% Candle SL,.m_Entry Candle,.m_Zone Touch #,.m_Zone Origin,.m_Re-entry @ Other Level,.m_Fast Into Profits,.m_Trade @ Range Over,.m_Checked,.p
+1,3.37,-1,-1,Hammer,2,1,No,No,No,No,AUDUSD
+2,2.43,-1,-1,Hammer,3,0,No,No,No,No,AUDUSD
+3,2.29,-1,-1,Engulfing,3,0,No,No,No,No,AUDUSD
+4,2.97,-1,-1,Engulfing,3,0,No,No,No,No,AUDUSD
+5,3.48,,,Spinning,4,0,No,No,No,No,AUDUSD
+6,3.22,3.22,3.22,Spinning,4,0,No,Yes,No,No,AUDUSD
+7,1.98,0,0,Spinning,5,0,No,No,No,No,AUDUSD
+8,4.8,-1,-1,Spinning,2,0,No,No,No,No,AUDUSD
+9,4.59,4.59,4.59,Spinning,3,2,No,Yes,No,No,AUDUSD
+10,1.71,-1,-1,Spinning,2,0,No,No,No,No,AUDUSD
+11,2.77,-1,-1,Spinning,2,0,No,No,No,No,AUDUSD
+12,2.15,-1,-1,Hammer,3,0,No,No,No,No,AUDUSD
+13,1.71,1.71,1.71,Spinning,2,0,No,Yes,No,No,AUDUSD
+14,6,-1,-1,Spinning,4,1,No,No,Yes,No,AUDUSD
+15,6.48,-1,-1,Spinning,4,1,No,No,Yes,No,AUDUSD
+16,5.07,4.67,4.67,Hammer,2,1,No,No,No,No,AUDUSD
+17,1.86,-1,-1,Spinning,2,0,No,No,No,No,AUDUSD
+18,3.87,-1,-1,Hammer,8,1,No,No,No,No,AUDUSD
+19,1.97,-1,-1,Spinning,3,0,No,No,No,No,AUDUSD
+20,3.25,3.07,3.07,Spinning,3,0,No,Yes,No,No,AUDUSD
+21,4.15,0,0,Spinning,3,2,No,No,No,No,AUDUSD
+22,2.44,-1,-1,Spinning,3,0,No,No,No,No,AUDUSD
+23,3.9,-1,-1,Spinning,4,0,No,Yes,No,No,AUDUSD
+24,1.92,-1,-1,Spinning,4,0,No,No,No,No,AUDUSD
+25,2.66,-1,-1,Spinning,4,1,No,No,No,No,AUDUSD
+,,,,,,,No,No,No,No,AUDUSD

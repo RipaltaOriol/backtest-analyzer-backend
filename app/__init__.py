@@ -14,8 +14,8 @@ app = Flask(__name__)
 
 # Configuration
 app.secret_key = 'secret-backtest-analyzer'
-# app.config.from_object('config.ProductionConfig')
-app.config.from_object('config.DevelopmentConfig')
+app.config.from_object('config.ProductionConfig')
+# app.config.from_object('config.DevelopmentConfig')
 
 app.config["JWT_TOKEN_LOCATION"] = ["headers", "cookies"]
 app.config["JWT_COOKIE_SECURE"] = False

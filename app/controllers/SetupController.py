@@ -10,27 +10,28 @@ from flask_jwt_extended import get_jwt_identity
 from app.models.User import User
 from app.models.Setup import Setup
 from app.models.Document import Document
+from app.controllers.ErrorController import handle_403
 
 """ Retrieves All Setups
 """
-def get_setups(document_id):
+def get_setups():
     id = get_jwt_identity()
-    setups = []
     user = User.objects(id = id['$oid']).get()
-    files = Setup.objects(author = user, documentId = document_id)
-
-    for file in files:
-        setup = {
-            'id': str(file.id),
-            'name': file.name,
-            'date': file.date_created,
-            'default': file.default
-        }
-        setups.append(setup)
-    response = jsonify(setups)
-    return response
+    setups = Setup.objects(author = user)
+    response = []
+    for setup in setups:
+        current = setup.to_json()
+        current = json.loads(current)
+        options = get_filter_options(setup.documentId.id)
+        current.update(options = options)
+        response.append(current)
+    response = json.dumps(response)
+    return Response(response, mimetype = 'application/json')
+    # return jsonify(response)
+    # return jsonify([json.loads(setup.to_json()) for setup in setups])
 
 """ Retrieves One Setup
+    NOTE: no use - delete in future
 """
 def get_setup(document_id, setup_id):
     id = get_jwt_identity()
@@ -55,61 +56,71 @@ def get_setup(document_id, setup_id):
     return Response(response, mimetype = 'application/json')
 
 """ Creates A New Setup
-    NOTE: fix issues
 """
-def post_setup(document_id):
+def post_setup():
     id = get_jwt_identity()
+    document = request.json.get('document', None)
     name = request.json.get('name', None)
     if name == '':
         name = 'undefined'
-    # NOTE check that doucment exists
+    # if not document ID is provided return error
+    if not document:
+        return handle_403(msg = 'Document is not provided')
 
+    # NOTE check that doucment exists
     user = User.objects(id = id['$oid']).get()
-    document = Document.objects(id = document_id).get()
+    document = Document.objects(id = document).get()
     # save the setup to the DB
-    setup = Setup(name = name, author = user, documentId = document, default = False).save()
+    setup = Setup(
+        name = name,
+        author = user,
+        documentId = document,
+        state = document.state,
+        default = False
+    ).save()
 
     return Response(setup.to_json(), mimetype = 'application/json')
 
 """ Renames A Setup
 """
-def put_setup(document_id, setup_id):
+def put_setup(setup_id):
     id = get_jwt_identity()
     name = request.json.get('name', None)
     default = request.json.get('default', None)
     notes = request.json.get('notes', None)
     user = User.objects(id = id['$oid']).get()
-    setup = Setup.objects(id = setup_id, author = user, documentId = document_id).get()
+    setup = Setup.objects(id = setup_id, author = user).get()
     setup.name = name if name else setup.name
     setup.notes = notes if notes != None else setup.notes
     if default:
-        Setup.objects(author = user, documentId = document_id, id__ne = setup_id).update(default = False)
+        Setup.objects(author = user, id__ne = setup_id, documentId = setup.documentId).update(default = False)
         setup.default = default
     setup.save()
+    response = setup.to_json()
+    response = json.loads(response)
+    # loads options and appends them to setup
+    options = get_filter_options(setup.documentId.id)
+    response.update(options = options)
+    response = json.dumps(response)
+    return Response(response, mimetype = 'application/json')
     return jsonify({'msg': 'Setup successfully updated', 'success': True})
 
 """ Delete A Setup
 """
-def delete_setup(document_id, setup_id):
+def delete_setup(setup_id):
     id = get_jwt_identity()
     user = User.objects(id = id['$oid']).get()
     # get setup
-    setup = Setup.objects(id = setup_id, author = user, documentId = document_id).get()
+    setup = Setup.objects(id = setup_id, author = user).get()
     setup.delete()
     return jsonify({'msg': 'Setup successfully deleted', 'success': True})
 
-""" Gets a file with the Setup to download
-"""
-def get_file(document_id, setup_id):
-    return "Hello World"
-
 """ Gets Setup Statistics
-    NOTE: problems if state has not been loaded (this should be fixed when files are removed)
 """
-def get_statistics(document_id, setup_id):
+def get_statistics(setup_id):
     id = get_jwt_identity()
     user = User.objects(id = id['$oid']).get()
-    setup = Setup.objects(author = user, id = setup_id, documentId = document_id).get()
+    setup = Setup.objects(author = user, id = setup_id).get()
     # transform DictField to JSON string for Pandas to read
     temp = json.dumps(setup.state)
     data = pd.read_json(temp, orient = 'table')
@@ -128,10 +139,10 @@ def get_statistics(document_id, setup_id):
 """ Get Setup Chart
     NOTE: needs some rethinking - probably move to different file
 """
-def get_graphics(document_id, setup_id):
+def get_graphics(setup_id):
     id = get_jwt_identity()
     user = User.objects(id = id['$oid']).get()
-    setup = Setup.objects(author = user, id = setup_id, documentId = document_id).get()
+    setup = Setup.objects(author = user, id = setup_id).get()
     temp = json.dumps(setup.state)
     data = pd.read_json(temp, orient = 'table')
     data.dropna(inplace = True)
@@ -173,12 +184,11 @@ def get_graphics(document_id, setup_id):
     return response
 
 """ Gets Setup Filter Options
-    NOTE: when removing files get the dataframe from the Document state
 """
 def get_filter_options(doucment_id):
     document = Document.objects(id = doucment_id).get()
-    target = os.path.join(app.root_path, app.config['UPLOAD_FOLDER'], document.path)
-    data = pd.read_csv(target)
+    temp = json.dumps(document.state)
+    data = pd.read_json(temp, orient = 'table')
 
     map_types = data.dtypes
     options = []

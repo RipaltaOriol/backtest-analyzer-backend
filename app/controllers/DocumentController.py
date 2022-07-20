@@ -1,5 +1,7 @@
 import os
+import json
 import shutil
+import pandas as pd
 
 from app import app
 from flask import request, jsonify
@@ -20,14 +22,14 @@ def get_documents():
   for file in files:
     document = {
       'id': str(file.id),
-      'name': file.title,
+      'name': file.name,
       'date': file.date_created
     }
     documents.append(document)
   response = jsonify(documents)
   return response
 
-""" Clone Doucment
+""" Update Doucment
 """
 def put_document(file_id):
   id = get_jwt_identity()
@@ -35,55 +37,36 @@ def put_document(file_id):
   # get the document and its new name
   name = request.json.get('name', None)
   name = secure_filename(name)
-  file = Document.objects(id = file_id).get()
-  # get the old path
-  old_path = file.path
-  # update file in directory
-  target = os.path.join(app.root_path, app.config['UPLOAD_FOLDER'], old_path)
-  new = os.path.join(app.root_path, app.config['UPLOAD_FOLDER'], str(user.id), name)
-  # check if file name already exists
-  if not os.path.exists(new):
-    os.rename(target, new)
-    # update file
-    file.path = str(user.id) + '/' + name
-    file.title = name
-    file.save()
-    return jsonify({'msg': 'Document successfully updated', 'success': True})
-  else:
-    return jsonify({'msg': 'File with this name already exist', 'success': False})
+  file = Document.objects(id = file_id, author = user).get()
+  file.name = name
+  file.save()
+  return jsonify({'msg': 'Document successfully updated', 'success': True})
 
 """ Upload Document
 """
 def post_document():
   id = get_jwt_identity()
   user = User.objects(id = id['$oid']).get()
-  # get target directory
-  target = os.path.join(app.root_path, app.config['UPLOAD_FOLDER'], str(user.id))
-  # create one if it does not exist
-  if not os.path.isdir(target):
-    os.mkdir(target)
-
   # get file
   file = request.files['file']
   # check that it is a CSV file
   if file.content_type == 'text/csv':
+    # transform Dataframe
+    df = pd.read_csv(file)
+    df = df.to_json(orient = 'table')
+    df = json.loads(df)
+
     filename = secure_filename(file.filename)
     # check if file exists
-    is_file_exists = Document.objects(title = filename)
+    is_file_exists = Document.objects(name = filename)
     if len(is_file_exists) > 0:
       return jsonify({'msg': 'This file already exists', 'success': False})
 
-    destination="/".join([target, filename])
-    file.save(destination)
-
-    # I do not know why this line was here
-    # session['uploadFilePath'] = destination
-
     # save the file to the DB  
     document = Document(
-      title = filename,
-      path = str(user.id) + '/' + filename,
-      author = user
+      name = filename,
+      author = user,
+      state = df
     )
     document.save()
     # save the default setup to the DB
@@ -91,7 +74,8 @@ def post_document():
       name = 'Default',
       author = user,
       documentId = document,
-      default = True
+      default = True,
+      state = df
     )
     setup.save()
 
@@ -109,24 +93,20 @@ def clone_document(file_id):
   copy_counter = 1
   file = Document.objects(id = file_id).get()
   # get the path and the new name
-  path = file.path
-  name = file.title
-  title = secure_filename(name + ' Copy' + str(copy_counter))
-  # update file in directory
-  target = os.path.join(app.root_path, app.config['UPLOAD_FOLDER'], path)
-  new = os.path.join(app.root_path, app.config['UPLOAD_FOLDER'], str(user.id), title)
-  # if file already exists then update the title
-  while os.path.exists(new):
-    copy_counter += 1
-    title = secure_filename(name + ' Copy' + str(copy_counter))
-    new = os.path.join(app.root_path, app.config['UPLOAD_FOLDER'], str(user.id), title)
+  original = file.name
+  new_name = secure_filename(original + ' Copy' + str(copy_counter))
 
-  shutil.copyfile(target, new)
+  is_file_exists = Document.objects(name = new_name)
+  while len(is_file_exists) > 0:
+      copy_counter += 1
+      new_name = secure_filename(original + ' Copy' + str(copy_counter))
+      is_file_exists = Document.objects(name = new_name)
+    
   # save the copy to the DB  
   document = Document(
-    title = title,
-    path = str(user.id) + '/' + title,
-    author = user
+    name = new_name,
+    author = user,
+    state = file.state
   )
   document.save()
   # save the default setup to the DB
@@ -134,7 +114,8 @@ def clone_document(file_id):
     name = 'Default',
     author = user,
     documentId = document,
-    default = True
+    default = True,
+    state = file.state
   )
   setup.save()
   return jsonify({'msg': 'Document successfully copied', 'success': True})
@@ -147,17 +128,12 @@ def delete_document(file_id):
   id = get_jwt_identity()
   user = User.objects(id = id['$oid']).get()
   # get the document
-  file = Document.objects(id = file_id).get()
-  # get the path
-  path = file.path
-  # delete file in directory
-  target = os.path.join(app.root_path, app.config['UPLOAD_FOLDER'], path)
-  if os.path.exists(target):
-    os.remove(target)
+  file = Document.objects(id = file_id, author = user).get()
+  try:
     # delete setups
     Setup.objects(documentId = file.id).delete()
     # delete file in DB
     file.delete()
     return jsonify({'msg': 'Document successfully deleted', 'success': True})
-  else:
+  except:
     return jsonify({'msg': 'Document does not exist', 'success': False})

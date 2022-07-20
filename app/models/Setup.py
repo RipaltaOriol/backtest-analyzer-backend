@@ -20,10 +20,16 @@ class Setup(DynamicDocument):
 
     def to_json(self):
         data = self.to_mongo()
+        # rename key ID and Document ID
+        data['id'] = str(self.id)
+        data['documentId'] = str(self.documentId.id)
+        data['date_created'] = self.date_created.isoformat()
+        del data['_id']
+
         # gets the Filter data instead of just the ID
         for i in range(len(data['filters'])):
             data['filters'][i]= {
-                'id': self.filters[i].id,
+                'id': str(self.filters[i].id),
                 'name': self.filters[i].name
             }
         return dumps(data)

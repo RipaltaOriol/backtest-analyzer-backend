@@ -44,7 +44,7 @@ def my_expired_token_callback(jwt_header, jwt_payload):
 
 # Blueprints
 app.register_blueprint(document_bp, url_prefix='/documents')
-app.register_blueprint(setup_bp, url_prefix='/documents/<document_id>/setups')
+app.register_blueprint(setup_bp, url_prefix='/setups')
 app.register_blueprint(filter_bp, url_prefix='/setups/<setup_id>/filters')
 app.register_blueprint(auth_bp)
 app.register_blueprint(error_bp)

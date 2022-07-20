@@ -4,6 +4,8 @@ from datetime import timedelta
 class Config(object):
   # Uplodas directory
   UPLOAD_FOLDER = 'uploads'
+  # Fonts directory
+  FONTS_FOLDER = 'fonts'
   # Debug & Testing
   DEBUG = False
   # Session secret

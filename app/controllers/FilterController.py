@@ -9,6 +9,7 @@ from app.models.Setup import Setup
 from app.models.Filter import Filter
 from app.models.Document import Document
 from app.controllers.ErrorController import handle_403
+from app.controllers.SetupController import get_filter_options
 
 """ Applies a Filter to a dataframe
 """
@@ -88,6 +89,9 @@ def post_filter(setup_id):
   setup.modify(state = df)
   response = setup.to_json()
   response = json.loads(response)
+  # loads options and appends them to setup
+  options = get_filter_options(setup.documentId.id)
+  response.update(options = options)
   response = json.dumps(response)
 
   return Response(response, mimetype = 'application/json')
@@ -104,8 +108,8 @@ def delete_filter(setup_id, filter_id):
 
     # establish remaining filters
     document = Document.objects(id = setup.documentId.id).get()
-    target = os.path.join(app.root_path, app.config['UPLOAD_FOLDER'], document.path)
-    df = pd.read_csv(target)
+    temp = json.dumps(document.state)
+    df = pd.read_json(temp, orient = 'table')
 
     for filter in setup.filters:
       df = apply_filter(df, filter.column, filter.operation, filter.value)
@@ -119,6 +123,9 @@ def delete_filter(setup_id, filter_id):
 
     response = setup.to_json()
     response = json.loads(response)
+    # loads options and appends them to setup
+    options = get_filter_options(setup.documentId.id)
+    response.update(options = options)
     response = json.dumps(response)
 
     return Response(response, mimetype = 'application/json')

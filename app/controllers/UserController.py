@@ -14,6 +14,7 @@ from app.controllers.ErrorController import handle_401, handle_403
 """ Login User
 """
 def login():
+  print('HERE')
   email = request.json.get('email', None)
   password = request.json.get('password', None)
   user = User.objects(email = email).first()
@@ -69,7 +70,6 @@ def signup():
 """ Logouut User
 """
 def logout():
-  print('Hitting this')
   response = jsonify({"msg": "Logout successful"})
   unset_jwt_cookies(response)
   return response

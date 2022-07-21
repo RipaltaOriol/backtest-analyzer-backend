@@ -30,7 +30,7 @@ connect(host = app.config['MONGO_URI'])
 
 # JWT, CORS config
 jwt = JWTManager(app)
-cors = CORS(app)
+CORS(app, support_credentials=True)
 app.config['CORS_HEADERS'] = 'Content-Type'
 
 from app.routes.document_bp import document_bp

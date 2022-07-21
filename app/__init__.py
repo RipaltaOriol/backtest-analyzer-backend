@@ -9,6 +9,7 @@ from mongoengine import connect
 
 # Logger config
 logging.basicConfig(level=logging.DEBUG)
+logging.getLogger('flask_cors').level = logging.DEBUG
 
 app = Flask(__name__)
 
@@ -29,8 +30,7 @@ connect(host = app.config['MONGO_URI'])
 
 # JWT, CORS config
 jwt = JWTManager(app)
-CORS(app)
-cors = CORS(app)
+CORS(app, resources = {r"/*": {"origins": "*"}})
 
 from app.routes.document_bp import document_bp
 from app.routes.setup_bp import setup_bp

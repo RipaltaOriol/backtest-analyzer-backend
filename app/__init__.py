@@ -23,8 +23,8 @@ app.config.from_object('config.ProductionConfig')
 # app.config.from_object('config.DevelopmentConfig')
 
 app.config["JWT_TOKEN_LOCATION"] = ["headers", "cookies"]
-app.config["JWT_COOKIE_SECURE"] = False
-app.config['JWT_COOKIE_CSRF_PROTECT'] = False
+app.config["JWT_COOKIE_SECURE"] = True
+app.config['JWT_COOKIE_CSRF_PROTECT'] = True
 # The default settings are fine
 # app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(seconds = 5)
 # app.config["JWT_REFRESH_TOKEN_EXPIRES"] = timedelta(minutes = 1)

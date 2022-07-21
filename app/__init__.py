@@ -15,16 +15,20 @@ app = Flask(__name__)
 
 # JWT, CORS config
 jwt = JWTManager(app)
-CORS(app, supports_credentials = True)
+CORS(app)
 
 # Configuration
 app.secret_key = 'secret-backtest-analyzer'
 app.config.from_object('config.ProductionConfig')
 # app.config.from_object('config.DevelopmentConfig')
 
-app.config["JWT_TOKEN_LOCATION"] = ["headers", "cookies"]
+# app.config["JWT_TOKEN_LOCATION"] = ["headers", "cookies"]
+# app.config["JWT_COOKIE_SECURE"] = True
+# app.config['JWT_COOKIE_CSRF_PROTECT'] = True
 app.config["JWT_COOKIE_SECURE"] = True
-app.config['JWT_COOKIE_CSRF_PROTECT'] = True
+app.config["JWT_TOKEN_LOCATION"] = ["headers", "cookies"]
+app.config["JWT_SECRET_KEY"] = "super-secret"  # Change this in your code!
+app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(hours=1)
 # The default settings are fine
 # app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(seconds = 5)
 # app.config["JWT_REFRESH_TOKEN_EXPIRES"] = timedelta(minutes = 1)
@@ -48,6 +52,13 @@ from app.routes.error_bp import error_bp
 @jwt.expired_token_loader
 def my_expired_token_callback(jwt_header, jwt_payload):
     return jsonify(err = "Token has expired"), 403
+
+@app.after_request
+def after_request(response):
+  response.headers.add('Access-Control-Allow-Origin', '*')
+  response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+  response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+  return response
 
 # Blueprints
 app.register_blueprint(document_bp, url_prefix='/documents')

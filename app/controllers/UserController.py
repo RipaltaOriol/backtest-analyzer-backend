@@ -14,7 +14,6 @@ from app.controllers.ErrorController import handle_401, handle_403
 """ Login User
 """
 def login():
-  print('HERE')
   email = request.json.get('email', None)
   password = request.json.get('password', None)
   user = User.objects(email = email).first()

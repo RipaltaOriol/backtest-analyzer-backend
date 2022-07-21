@@ -30,9 +30,14 @@ connect(host = app.config['MONGO_URI'])
 
 # JWT, CORS config
 jwt = JWTManager(app)
-CORS(app, support_credentials=True)
-app.config['CORS_HEADERS'] = 'Content-Type'
+CORS(app)
 
+from app.controllers import UserController
+from app.controllers import DocumentController
+from app.controllers import FilterController
+from app.controllers import SetupController
+from app.controllers import PDFController
+from app.controllers import ErrorController
 from app.routes.document_bp import document_bp
 from app.routes.setup_bp import setup_bp
 from app.routes.filter_bp import filter_bp

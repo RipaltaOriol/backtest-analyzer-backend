@@ -6,7 +6,7 @@ from app.controllers.UserController import login, signup, logout, refresh, autho
 # Initialize blueprint
 auth_bp = Blueprint('auth_bp', __name__)
 
-auth_bp.route('/login', methods = ['POST'])(cross_origin(support_credentials=True)(login))
+auth_bp.route('/login', methods = ['POST'])(cross_origin()(login))
 auth_bp.route('/signup', methods = ['POST'])(signup)
 auth_bp.route('/refresh', methods = ['GET'])(jwt_required(refresh=True)(refresh))
 auth_bp.route('/logout', methods=['POST'])(jwt_required(refresh=True)(logout))

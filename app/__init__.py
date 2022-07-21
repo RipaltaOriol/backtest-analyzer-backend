@@ -15,7 +15,7 @@ app = Flask(__name__)
 
 # JWT, CORS config
 jwt = JWTManager(app)
-CORS(app, supports_credentials = True)
+CORS(app, origins=["http://localhost:3006", "https://serene-beach-99280.herokuapp.com"])
 
 # Configuration
 app.secret_key = 'secret-backtest-analyzer'

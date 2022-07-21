@@ -14,32 +14,25 @@ from app.controllers.ErrorController import handle_401, handle_403
 """ Login User
 """
 def login():
+  email = request.json.get('email', None)
+  password = request.json.get('password', None)
+  user = User.objects(email = email).first()
+  if user == None:
+    return handle_403(msg = 'Incorrect email or password')
+  is_match = check_password_hash(user.password, password)
+  if not is_match:
+      return handle_403(msg = 'Incorrect email or password')
+
+  user_id = json.loads(json_util.dumps(user.id))
+  access_token = create_access_token(identity = user_id)
+  refresh_token = create_refresh_token(identity = user_id)
   response = jsonify({
-    'user': 'dasfsdfsd',
+    'user': user_id['$oid'],
     'msg': 'Login successful',
-    'access_token': 'dasfkl;dsfsdfa',
+    'access_token': access_token,
     'success': True
   })
-  return response
-  # email = request.json.get('email', None)
-  # password = request.json.get('password', None)
-  # user = User.objects(email = email).first()
-  # if user == None:
-  #   return handle_403(msg = 'Incorrect email or password')
-  # is_match = check_password_hash(user.password, password)
-  # if not is_match:
-  #     return handle_403(msg = 'Incorrect email or password')
-
-  # user_id = json.loads(json_util.dumps(user.id))
-  # access_token = create_access_token(identity = user_id)
-  # refresh_token = create_refresh_token(identity = user_id)
-  # response = jsonify({
-  #   'user': user_id['$oid'],
-  #   'msg': 'Login successful',
-  #   'access_token': access_token,
-  #   'success': True
-  # })
-  # set_refresh_cookies(response, refresh_token)
+  set_refresh_cookies(response, refresh_token)
   return response
 
 """ Signup User

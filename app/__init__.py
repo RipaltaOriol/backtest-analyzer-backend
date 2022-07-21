@@ -13,6 +13,10 @@ logging.getLogger('flask_cors').level = logging.DEBUG
 
 app = Flask(__name__)
 
+# JWT, CORS config
+jwt = JWTManager(app)
+CORS(app)
+
 # Configuration
 app.secret_key = 'secret-backtest-analyzer'
 app.config.from_object('config.ProductionConfig')
@@ -27,10 +31,6 @@ app.config['JWT_COOKIE_CSRF_PROTECT'] = False
 
 # DB connection
 connect(host = app.config['MONGO_URI'])
-
-# JWT, CORS config
-jwt = JWTManager(app)
-CORS(app)
 
 from app.controllers import UserController
 from app.controllers import DocumentController

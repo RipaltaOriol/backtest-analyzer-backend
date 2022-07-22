@@ -53,10 +53,9 @@ def post_document():
   if file.content_type == 'text/csv':
     # transform Dataframe
     df = pd.read_csv(file)
+    # include in how-to
     # drop emtpy rows / columns
-    print(df)
-    df.dropna(axis = 1, inplace=True)
-    print(df)
+    # df.dropna(axis = 1, inplace=True)
     df = df.to_json(orient = 'table')
     df = json.loads(df)
 

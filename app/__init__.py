@@ -9,7 +9,7 @@ from mongoengine import connect
 
 # Logger config
 logging.basicConfig(level=logging.DEBUG)
-logging.getLogger('flask_cors').level = logging.DEBUG
+# logging.getLogger('flask_cors').level = logging.DEBUG
 
 app = Flask(__name__)
 

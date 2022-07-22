@@ -96,7 +96,7 @@ def get_file(setup_id):
     elements = []
 
     elements.append(Table([
-        [Paragraph(setup.documentId.title, style['title']),
+        [Paragraph(setup.documentId.name, style['title']),
         Paragraph(date, style['date'])]
     ], style=table_style))
 

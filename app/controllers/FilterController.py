@@ -1,7 +1,9 @@
 import os
 import json
+import numpy as np
 from app import app
 import pandas as pd
+from io import StringIO
 from flask import request, jsonify
 from flask.wrappers import Response
 
@@ -10,6 +12,15 @@ from app.models.Filter import Filter
 from app.models.Document import Document
 from app.controllers.ErrorController import handle_403
 from app.controllers.SetupController import get_filter_options
+
+
+
+# Encoder to deal with numpy Boolean values
+class CustomJSONizer(json.JSONEncoder):
+    def default(self, obj):
+        return super().encode(bool(obj)) \
+            if isinstance(obj, np.bool_) \
+            else super().default(obj)
 
 """ Applies a Filter to a dataframe
 """
@@ -56,7 +67,7 @@ def get_filter_name(column, operation, value):
   elif operation == 'nin':
     name += ' not includs '
   # attach values
-  values = ','.join(str(v) for v in value)
+  values = ', '.join(str(v) for v in value)
   name += values
   return name
 
@@ -68,7 +79,7 @@ def post_filter(setup_id):
   value = request.json.get('value', None)
   setup = Setup.objects(id = setup_id).get()
   temp = json.dumps(setup.state)
-  data = pd.read_json(temp, orient='table')
+  data = pd.read_json(StringIO(temp), orient='table')
 
   if column == None or operation == None or value == None:
     return handle_403(msg = 'Filter is not valid')
@@ -92,7 +103,7 @@ def post_filter(setup_id):
   # loads options and appends them to setup
   options = get_filter_options(setup.documentId.id)
   response.update(options = options)
-  response = json.dumps(response)
+  response = json.dumps(response, cls = CustomJSONizer)
 
   return Response(response, mimetype = 'application/json')
 
@@ -109,7 +120,7 @@ def delete_filter(setup_id, filter_id):
     # establish remaining filters
     document = Document.objects(id = setup.documentId.id).get()
     temp = json.dumps(document.state)
-    df = pd.read_json(temp, orient = 'table')
+    df = pd.read_json(StringIO(temp), orient = 'table')
 
     for filter in setup.filters:
       df = apply_filter(df, filter.column, filter.operation, filter.value)
@@ -126,7 +137,7 @@ def delete_filter(setup_id, filter_id):
     # loads options and appends them to setup
     options = get_filter_options(setup.documentId.id)
     response.update(options = options)
-    response = json.dumps(response)
+    response = json.dumps(response, cls = CustomJSONizer)
 
     return Response(response, mimetype = 'application/json')
     

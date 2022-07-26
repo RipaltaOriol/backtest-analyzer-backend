@@ -3,6 +3,7 @@ import json
 from app import app
 import numpy as np
 import pandas as pd
+from io import StringIO
 from flask import jsonify, request
 from flask.wrappers import Response
 from flask_jwt_extended import get_jwt_identity
@@ -12,20 +13,31 @@ from app.models.Setup import Setup
 from app.models.Document import Document
 from app.controllers.ErrorController import handle_403
 
+
+# Encoder to deal with numpy Boolean values
+class CustomJSONizer(json.JSONEncoder):
+    def default(self, obj):
+        return super().encode(bool(obj)) \
+            if isinstance(obj, np.bool_) \
+            else super().default(obj)
+
 """ Retrieves All Setups
 """
 def get_setups():
     id = get_jwt_identity()
     user = User.objects(id = id['$oid']).get()
     setups = Setup.objects(author = user)
+    
     response = []
     for setup in setups:
         current = setup.to_json()
+
         current = json.loads(current)
         options = get_filter_options(setup.documentId.id)
         current.update(options = options)
         response.append(current)
-    response = json.dumps(response)
+   
+    response = json.dumps(response, cls = CustomJSONizer)
     return Response(response, mimetype = 'application/json')
     # return jsonify(response)
     # return jsonify([json.loads(setup.to_json()) for setup in setups])
@@ -123,7 +135,7 @@ def get_statistics(setup_id):
     setup = Setup.objects(author = user, id = setup_id).get()
     # transform DictField to JSON string for Pandas to read
     temp = json.dumps(setup.state)
-    data = pd.read_json(temp, orient = 'table')
+    data = pd.read_json(StringIO(temp), orient = 'table')
     statistics = []
     for column in data.columns:
         if column.startswith('.r_'):
@@ -138,26 +150,27 @@ def get_statistics(setup_id):
 
 """ Get Setup Chart
     NOTE: needs some rethinking - probably move to different file
+    NOTE: think of a method for data sanitization to drop NaN values so it does not break 
 """
 def get_graphics(setup_id):
     id = get_jwt_identity()
     user = User.objects(id = id['$oid']).get()
     setup = Setup.objects(author = user, id = setup_id).get()
     temp = json.dumps(setup.state)
-    data = pd.read_json(temp, orient = 'table')
-    data.dropna(inplace = True)
+    data = pd.read_json(StringIO(temp), orient = 'table')
+    # data.dropna(inplace = True)
     result_names = [column for column in data.columns if column.startswith('.r_')]
 
     # line chart
-    equity = 1000
     datasets = []
     for column in result_names:
+        equity = 1000
         points = []
         for i in range(len(data[column])):
             if i == 0:
-                points.append(equity + equity * 0.01 * data['.r_Result'].iloc[i])
+                points.append(equity + equity * 0.01 * data[column].iloc[i])
             else:
-                points.append(points[i - 1] + points[i - 1] * 0.01 * data['.r_Result'].iloc[i])
+                points.append(points[i - 1] + points[i - 1] * 0.01 * data[column].iloc[i])
         datasets.append({
             'name': column[3:],
             'values': points
@@ -188,11 +201,13 @@ def get_graphics(setup_id):
 def get_filter_options(doucment_id):
     document = Document.objects(id = doucment_id).get()
     temp = json.dumps(document.state)
-    data = pd.read_json(temp, orient = 'table')
+    
+    # newdf = pd.read_json(StringIO(temp))
+    data = pd.read_json(StringIO(temp), orient = 'table')
+    # return 'Hello'
 
     map_types = data.dtypes
     options = []
-
     for column in data.columns:
         if column.startswith('.m_'):
             option = {

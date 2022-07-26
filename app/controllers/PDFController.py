@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 
 from app import app
-from io import BytesIO
+from io import BytesIO, StringIO
 from flask import send_file
 from datetime import datetime
 from app.models.Setup import Setup
@@ -64,8 +64,8 @@ def get_file(setup_id):
     # get current Setup
     setup = Setup.objects(id = setup_id).get() # this query should not be like this
     temp = json.dumps(setup.state)
-    data = pd.read_json(temp, orient='table')
-
+    data = pd.read_json(StringIO(temp), orient='table')
+    data.drop(['.s'], axis = 1, inplace = True, errors='ignore')
     print(data.dtypes)
     
     
@@ -143,14 +143,14 @@ def get_file(setup_id):
     elements.append(Image(buf))
     
     plt.figure()
-    equity = 1000
     for column in result_names:
+        equity = 1000
         points = []
         for i in range(len(data[column])):
             if i == 0:
-                points.append(equity + equity * 0.01 * data['.r_Result'].iloc[i])
+                points.append(equity + equity * 0.01 * data[column].iloc[i])
             else:
-                points.append(points[i - 1] + points[i - 1] * 0.01 * data['.r_Result'].iloc[i])
+                points.append(points[i - 1] + points[i - 1] * 0.01 * data[column].iloc[i])
         plt.plot(points, label = column[3:])
     plt.title("$1000 investment simulation", fontsize=10)
     plt.legend()

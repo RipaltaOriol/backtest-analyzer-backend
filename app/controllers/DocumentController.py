@@ -61,7 +61,7 @@ def post_document():
 
     filename = secure_filename(file.filename)
     # check if file exists
-    is_file_exists = Document.objects(name = filename)
+    is_file_exists = Document.objects(name = filename, author = user)
     if len(is_file_exists) > 0:
       return jsonify({'msg': 'This file already exists', 'success': False})
 

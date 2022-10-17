@@ -11,6 +11,7 @@ from flask_jwt_extended import get_jwt_identity
 from app.models.User import User
 from app.models.Setup import Setup
 from app.models.Document import Document
+from app.controllers.GraphsController import get_scatter, get_bar
 from app.controllers.ErrorController import handle_403
 
 
@@ -66,6 +67,7 @@ def get_setup(document_id, setup_id):
     response.update(options = filter_options)
     response = json.dumps(response)
     return Response(response, mimetype = 'application/json')
+
 
 """ Creates A New Setup
 """
@@ -136,14 +138,57 @@ def get_statistics(setup_id):
     # transform DictField to JSON string for Pandas to read
     temp = json.dumps(setup.state)
     data = pd.read_json(StringIO(temp), orient = 'table')
-    statistics = []
-    for column in data.columns:
-        if column.startswith('.r_'):
-            described = data[column].describe().apply("{0:.2f}".format).to_json()
-            described = json.loads(described)
-            # the prefix of ._r always has length 3
-            described.update(name = column[3:])
-            statistics.append(described)
+    result_columns = [col for col in data if col.startswith('.r_')]
+
+    count = { 'stat': 'Count' }
+    total = { 'stat': 'Total' }
+    wins = { 'stat': 'Wins' }
+    losses = { 'stat': 'Losses' }
+    break_even = { 'stat': 'Break Even' }
+    win_rate = { 'stat': 'Win Rate' }
+    avg_win = { 'stat': 'Average Win' }
+    avg_loss = { 'stat': 'Average Loss' }
+    expectancy = { 'stat': 'Expectancy' }
+    max_consec_loss = { 'stat': 'Max. Consecutive Losses' }
+    max_win = { 'stat': 'Maximum Win' }
+
+        
+    for col in result_columns:
+        count[col] = 0
+        total[col] = 0
+        wins[col] = 0
+        losses[col] = 0
+        break_even[col] = 0
+        total_wins = 0
+        total_losses = 0
+        consecutive_losses = 0
+        current_losses = 0
+        for val in data[col]:
+            count[col] += 1
+            total[col] += val
+            if val > 0:
+                wins[col] += 1
+                total_wins += val
+                consecutive_losses = max(consecutive_losses, current_losses)
+                current_losses = 0
+            elif val < 0:
+                total_losses += val
+                losses[col] += 1
+                current_losses += 1
+            else:
+                break_even[col] += 1
+                consecutive_losses = max(consecutive_losses, current_losses)
+                current_losses = 0
+        total[col] = round(total[col], 3)
+        win_rate[col] = wins[col] / count[col]
+        avg_win[col] = total_wins / wins[col]
+        avg_loss[col] = total_losses / losses[col]
+        expectancy[col] = (win_rate[col] * avg_win[col]) - ((1 - win_rate[col]) * abs(avg_loss[col]))
+        max_consec_loss[col] = max(consecutive_losses, current_losses)
+        max_win[col] = data[col].max()
+        
+    statistics = [count, total, wins, losses, break_even, win_rate, avg_win, avg_loss, expectancy, max_consec_loss, max_win]
+    
 
     response = jsonify(statistics)
     return response
@@ -196,6 +241,31 @@ def get_graphics(setup_id):
     response = jsonify(line = line, pie = pie)
     return response
 
+""" Gets Setups Graphs
+"""
+def get_graphs(setup_id):
+    id = get_jwt_identity()
+    user = User.objects(id = id['$oid']).get()
+    setup = Setup.objects(author = user, id = setup_id).get()
+    temp = json.dumps(setup.state)
+    data = pd.read_json(StringIO(temp), orient = 'table')
+    # data.dropna(inplace = True)
+    args = request.args
+    type = args.get('type')
+
+    if not type:
+        # throw exeption
+        return 'Bad'
+
+    result_columns = [column for column in data.columns if column.startswith('.r_')]
+    metric_columns = [col for col in data if col.startswith('.m_')]
+
+    if type == 'scatter':
+        return get_scatter(data, result_columns, metric_columns)
+    if type == 'bar':
+        return get_bar(data, result_columns, metric_columns)
+    return "Bad"
+
 """ Gets Setup Filter Options
 """
 def get_filter_options(doucment_id):
@@ -230,3 +300,7 @@ def get_filter_options(doucment_id):
             options.append(option)
 
     return options
+
+def get_children(document_id):
+    setups = Setup.objects(documentId = document_id)
+    return [{"id": str(setup.id), "name": setup.name} for setup in setups]

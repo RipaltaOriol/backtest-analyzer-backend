@@ -26,10 +26,18 @@ class CustomJSONizer(json.JSONEncoder):
 """
 def apply_filter(df, column, operation, value):
   if operation == 'in' or operation == 'nin':
-    if operation == 'in':
-      df = df[df[column].isin(value)]
-    elif operation == 'nin':
-      df = df[-df[column].isin(value)]
+    if df.dtypes[column] == 'bool' and len(value) == 1:
+      # convert string 'true' or 'false' to bool
+      value_bool = value[0] == 'true'
+      if operation == 'in':
+        df = df[df[column] == value_bool]
+      elif operation == 'nin':
+        df = df[df[column] != value_bool]
+    else:
+      if operation == 'in':
+        df = df[df[column].isin(value)]
+      elif operation == 'nin':
+        df = df[-df[column].isin(value)]
   else:
     # update the value so that it only gets the first element
     value = value[0]
@@ -65,7 +73,7 @@ def get_filter_name(column, operation, value):
   elif operation == 'in':
     name += ' includes '
   elif operation == 'nin':
-    name += ' not includs '
+    name += ' not includes '
   # attach values
   values = ', '.join(str(v) for v in value)
   name += values

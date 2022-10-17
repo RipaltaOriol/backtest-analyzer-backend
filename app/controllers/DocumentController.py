@@ -12,6 +12,8 @@ from app.models.User import User
 from app.models.Setup import Setup
 from app.models.Document import Document
 
+from app.controllers.SetupController import get_children
+
 """ Retrieves All Documents
 """
 def get_documents():
@@ -28,6 +30,35 @@ def get_documents():
     documents.append(document)
   response = jsonify(documents)
   return response
+
+""" Retrieves All Document w/ Child Setups
+"""
+def get_documents_setups():
+  documents = []
+  id = get_jwt_identity()
+  user = User.objects(id = id['$oid']).get()
+  files = Document.objects(author = user)
+  for file in files:
+    single_file = file.with_children()
+    single_file["setups"] = get_children(single_file["id"])
+    documents.append(single_file)
+  response = jsonify(documents)
+  return response
+
+
+""" Retrieves a Document w/ Setups (compare)
+"""
+def get_document_compare(file_id):
+    id = get_jwt_identity()
+    user = User.objects(id = id['$oid']).get()
+    setups = Setup.objects(author = user, documentId = file_id)
+    setups_compared = []
+    for setup in setups:
+      current = setup.setup_compare()
+      current = json.loads(current)
+      setups_compared.append(current)
+    response = jsonify(setups_compared)
+    return response
 
 """ Update Doucment
 """
@@ -53,6 +84,9 @@ def post_document():
   if file.content_type == 'text/csv':
     # transform Dataframe
     df = pd.read_csv(file)
+    # if date column included it parses it
+    if '.d' in df.columns:
+      df['.d'] =  pd.to_datetime(df['.d'])
     # include in how-to
     # drop emtpy rows / columns
     # df.dropna(axis = 1, inplace=True)

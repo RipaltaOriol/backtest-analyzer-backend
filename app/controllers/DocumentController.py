@@ -129,7 +129,7 @@ def post_document():
   
   filename = secure_filename(file.filename)
   file_source = request.form.get('filesourcetype', None)
-
+  
   # check if file exists
   is_file_exists = Document.objects(name = filename, author = user)
   if len(is_file_exists) > 0:

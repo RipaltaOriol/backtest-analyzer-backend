@@ -69,7 +69,6 @@ def signup():
 """ Logouut User
 """
 def logout():
-  print('Hitting this')
   response = jsonify({"msg": "Logout successful"})
   unset_jwt_cookies(response)
   return response

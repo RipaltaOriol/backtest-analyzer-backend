@@ -83,12 +83,12 @@ def get_filter_name(column, operation, value):
 """
 def post_filter(setup_id):
   column = request.json.get('column', None)
-  operation = request.json.get('operation', None)
+  operation = request.json.get('action', None)
   value = request.json.get('value', None)
+  print(value)
   setup = Setup.objects(id = setup_id).get()
   temp = json.dumps(setup.state)
   data = pd.read_json(StringIO(temp), orient='table')
-
   if column == None or operation == None or value == None:
     return handle_403(msg = 'Filter is not valid')
 
@@ -96,6 +96,7 @@ def post_filter(setup_id):
   name = get_filter_name(column, operation, value)
   df = data.to_json(orient = 'table')
   df = json.loads(df)
+  
   filter = Filter(
     name = name,
     column = column,
@@ -119,7 +120,7 @@ def post_filter(setup_id):
 """
 def delete_filter(setup_id, filter_id):
   try:
-    setup = Setup.objects(id = setup_id).get()  
+    setup = Setup.objects(id = setup_id).get()
     filter_dlt = Filter.objects(id = filter_id).get()
     # delete filter instance in setup
     to_dlt = filter_dlt.pk
@@ -151,4 +152,3 @@ def delete_filter(setup_id, filter_id):
     
   except:
     return handle_403(msg = 'Somethign went wrong')
-  

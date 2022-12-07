@@ -23,7 +23,7 @@ class ProductionConfig(Config):
 
 class DevelopmentConfig(Config):
   # Connect to the database
-  MONGO_URI = 'mongodb://localhost/backtest-analyzer'
+  MONGO_URI = 'mongodb://localhost:27017/backtest-analyzer'
   # JWT config
   JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=24)
   DEBUG = True

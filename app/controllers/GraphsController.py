@@ -62,3 +62,18 @@ def get_bar(df, result_columns, metric_columns):
         'dataLabels': data_labels,
         'labels': labels
     })
+
+def get_pie(df, result_column):
+
+    pie = {'data': [
+            len(df[df[result_column[0]] > 0]),
+            len(df[df[result_column[0]] == 0]),
+            len(df[df[result_column[0]] < 0])
+        ]
+    }
+
+    return jsonify({
+        'title': result_column[0][3:] + ' by Outcome Distribution',
+        'data': [pie],
+        'labels': ['Winners', 'Break-Even', 'Lossers'],
+    })

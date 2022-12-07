@@ -11,8 +11,10 @@ from flask_jwt_extended import get_jwt_identity
 from app.models.User import User
 from app.models.Setup import Setup
 from app.models.Document import Document
-from app.controllers.GraphsController import get_scatter, get_bar
+from app.controllers.GraphsController import get_scatter, get_bar, get_pie
 from app.controllers.ErrorController import handle_403
+
+from app.controllers.setup_utils import reset_state_from_document
 
 
 # Encoder to deal with numpy Boolean values
@@ -32,7 +34,8 @@ def get_setups():
     response = []
     for setup in setups:
         current = setup.to_json()
-
+        # for col in current.state['schema']['fields']:
+        #     print(col)
         current = json.loads(current)
         options = get_filter_options(setup.documentId.id)
         current.update(options = options)
@@ -126,6 +129,9 @@ def delete_setup(setup_id):
     user = User.objects(id = id['$oid']).get()
     # get setup
     setup = Setup.objects(id = setup_id, author = user).get()
+
+    for filter in setup.filters:
+        filter.delete()
     setup.delete()
     return jsonify({'msg': 'Setup successfully deleted', 'success': True})
 
@@ -181,8 +187,8 @@ def get_statistics(setup_id):
                 current_losses = 0
         total[col] = round(total[col], 3)
         win_rate[col] = wins[col] / count[col]
-        avg_win[col] = total_wins / wins[col]
-        avg_loss[col] = total_losses / losses[col]
+        avg_win[col] = total_wins / wins[col] if wins[col] else 0
+        avg_loss[col] = total_losses / losses[col] if losses[col] else 0
         expectancy[col] = (win_rate[col] * avg_win[col]) - ((1 - win_rate[col]) * abs(avg_loss[col]))
         max_consec_loss[col] = max(consecutive_losses, current_losses)
         max_win[col] = data[col].max()
@@ -264,6 +270,8 @@ def get_graphs(setup_id):
         return get_scatter(data, result_columns, metric_columns)
     if type == 'bar':
         return get_bar(data, result_columns, metric_columns)
+    if type == 'pie':
+        return get_pie(data, result_columns)
     return "Bad"
 
 """ Gets Setup Filter Options
@@ -293,7 +301,7 @@ def get_filter_options(doucment_id):
         if column.startswith('.p'):
             option = {
                 "id": column,
-                "name": column[2:],
+                "name": 'Pair',
                 "type": "string",
                 "values": list(data[column].dropna().unique())
             }
@@ -301,6 +309,13 @@ def get_filter_options(doucment_id):
 
     return options
 
-def get_children(document_id):
+""" Updates the setups state from parent state
+"""
+def update_setups(document_id):
     setups = Setup.objects(documentId = document_id)
-    return [{"id": str(setup.id), "name": setup.name} for setup in setups]
+    for setup in setups:
+        reset_state_from_document(setup.id)
+
+def get_children(document_id):
+    setups = Setup.objects(documentId = document_id).order_by('-date_created')
+    return [{"id": str(setup.id), "name": setup.name, "date": setup.date_created} for setup in setups]

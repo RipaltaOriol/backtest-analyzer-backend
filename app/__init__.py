@@ -1,3 +1,4 @@
+import os
 import logging
 from datetime import timedelta
 from flask import Flask, jsonify
@@ -23,8 +24,8 @@ CORS(app, supports_credentials = True)
 
 # Configuration
 app.secret_key = 'secret-backtest-analyzer'
-# app.config.from_object('config.ProductionConfig')
-app.config.from_object('config.DevelopmentConfig')
+# app.config.from_object('')
+app.config.from_object(os.getenv("APP_ENV"))
 
 app.config["JWT_TOKEN_LOCATION"] = ["headers", "cookies"]
 app.config["JWT_COOKIE_SECURE"] = True

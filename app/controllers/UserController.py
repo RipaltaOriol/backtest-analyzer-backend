@@ -1,3 +1,4 @@
+import os
 import json
 
 from bson import json_util
@@ -10,6 +11,11 @@ from werkzeug.security import generate_password_hash, check_password_hash
 
 from app.models.User import User
 from app.controllers.ErrorController import handle_401, handle_403
+
+def test_env():
+  # return 
+  x = os.getenv("APP_NAME")
+  return f"Hello {x}"
 
 """ Login User
 """

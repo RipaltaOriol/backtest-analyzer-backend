@@ -6,6 +6,10 @@ from mongoengine import *
 from flask_jwt_extended import JWTManager
 from mongoengine import document
 from mongoengine import connect
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # Logger config
 logging.basicConfig(level=logging.DEBUG)
@@ -19,8 +23,8 @@ CORS(app, supports_credentials = True)
 
 # Configuration
 app.secret_key = 'secret-backtest-analyzer'
-app.config.from_object('config.ProductionConfig')
-# app.config.from_object('config.DevelopmentConfig')
+# app.config.from_object('config.ProductionConfig')
+app.config.from_object('config.DevelopmentConfig')
 
 app.config["JWT_TOKEN_LOCATION"] = ["headers", "cookies"]
 app.config["JWT_COOKIE_SECURE"] = True

@@ -4,20 +4,25 @@ from io import StringIO
 
 import numpy as np
 import pandas as pd
+from flask import jsonify, request
+from flask.wrappers import Response
+
 from app import app
 from app.controllers.ErrorController import handle_403
 from app.controllers.SetupController import get_filter_options
 from app.models.Document import Document
 from app.models.Filter import Filter
 from app.models.Setup import Setup
-from flask import jsonify, request
-from flask.wrappers import Response
 
 
 # Encoder to deal with numpy Boolean values
 class CustomJSONizer(json.JSONEncoder):
     def default(self, obj):
-        return super().encode(bool(obj)) if isinstance(obj, np.bool_) else super().default(obj)
+        return (
+            super().encode(bool(obj))
+            if isinstance(obj, np.bool_)
+            else super().default(obj)
+        )
 
 
 def apply_filter(df, column, operation, value):

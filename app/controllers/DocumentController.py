@@ -4,9 +4,6 @@ import shutil
 from io import StringIO
 
 import pandas as pd
-from flask import jsonify, request
-from flask_jwt_extended import get_jwt_identity
-
 from app import app
 from app.controllers.SetupController import get_children, update_setups
 from app.controllers.UploadController import upload_default, upload_mt4
@@ -14,6 +11,8 @@ from app.controllers.utils import parse_column_name, parse_column_type
 from app.models.Document import Document
 from app.models.Setup import Setup
 from app.models.User import User
+from flask import jsonify, request
+from flask_jwt_extended import get_jwt_identity
 
 source_map = {
     "default": "Default",
@@ -227,10 +226,8 @@ def update_document(file_id):
 
         index = data.get("index")
         try:
-            print(df.iloc[index])
             df = df.drop([index + 1])
         except:
-            print("Here")
             return jsonify({"msg": "This row does not exist.", "success": False})
 
     else:

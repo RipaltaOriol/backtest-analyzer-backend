@@ -29,8 +29,6 @@ def upload_default(file):
 def upload_mt4(file):
     data = pd.read_excel(file, index_col=False)
 
-    print(data)
-
     start = data.index[data["Raw Trading Ltd"] == "Ticket"].tolist()[0]
     end = data.index[data["Raw Trading Ltd"] == "Open Trades:"].tolist()[0]
 
@@ -90,7 +88,6 @@ def upload_mt4(file):
     }
 
     df.rename(columns=rename_columns, errors="raise", inplace=True)
-    print(df)
 
     df = df.to_json(orient="table")
     df = json.loads(df)

@@ -4,10 +4,6 @@ from io import StringIO
 
 import numpy as np
 import pandas as pd
-from flask import jsonify, request
-from flask.wrappers import Response
-from flask_jwt_extended import get_jwt_identity
-
 from app import app
 from app.controllers.ErrorController import handle_403
 from app.controllers.GraphsController import get_bar, get_pie, get_scatter
@@ -15,6 +11,9 @@ from app.controllers.setup_utils import reset_state_from_document
 from app.models.Document import Document
 from app.models.Setup import Setup
 from app.models.User import User
+from flask import jsonify, request
+from flask.wrappers import Response
+from flask_jwt_extended import get_jwt_identity
 
 
 # Encoder to deal with numpy Boolean values
@@ -39,8 +38,6 @@ def get_setups():
     response = []
     for setup in setups:
         current = setup.to_json()
-        # for col in current.state['schema']['fields']:
-        #     print(col)
         current = json.loads(current)
         options = get_filter_options(setup.documentId.id)
         current.update(options=options)

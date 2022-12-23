@@ -4,15 +4,14 @@ from io import StringIO
 
 import numpy as np
 import pandas as pd
-from flask import jsonify, request
-from flask.wrappers import Response
-
 from app import app
 from app.controllers.ErrorController import handle_403
 from app.controllers.SetupController import get_filter_options
 from app.models.Document import Document
 from app.models.Filter import Filter
 from app.models.Setup import Setup
+from flask import jsonify, request
+from flask.wrappers import Response
 
 
 # Encoder to deal with numpy Boolean values
@@ -93,7 +92,6 @@ def post_filter(setup_id):
     column = request.json.get("column", None)
     operation = request.json.get("action", None)
     value = request.json.get("value", None)
-    print(value)
     setup = Setup.objects(id=setup_id).get()
     temp = json.dumps(setup.state)
     data = pd.read_json(StringIO(temp), orient="table")

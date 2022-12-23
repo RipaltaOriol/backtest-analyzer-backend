@@ -4,21 +4,19 @@ from io import StringIO
 
 import numpy as np
 import pandas as pd
-from flask import jsonify, request
-from flask.wrappers import Response
-
 from app import app
 from app.controllers.ErrorController import handle_403
 from app.models.Document import Document
 from app.models.Filter import Filter
 from app.models.Setup import Setup
+from flask import jsonify, request
+from flask.wrappers import Response
 
 """ Applies a Filter to a dataframe
 """
 
 
 def apply_filter(df, column, operation, value):
-    print(column, operation, value)
     if operation == "in" or operation == "nin":
         if df.dtypes[column] == "bool" and len(value) == 1:
             # convert string 'true' or 'false' to bool
@@ -38,10 +36,7 @@ def apply_filter(df, column, operation, value):
         if operation == "gt":
             df = df[df[column] > value]
         elif operation == "lt":
-            print("Come here")
-            print(df[column])
             df = df[df[column] < value]
-            print(df)
         elif operation == "eq":
             df = df[df[column] == value]
         elif operation == "ne":

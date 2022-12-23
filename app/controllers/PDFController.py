@@ -6,10 +6,9 @@ from io import BytesIO, StringIO
 import matplotlib
 import numpy as np
 import pandas as pd
-from flask import send_file
-
 from app import app
 from app.models.Setup import Setup
+from flask import send_file
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -57,7 +56,6 @@ class NumberedCanvas(canvas.Canvas):
         for state in self._saved_page_states:
             self.__dict__.update(state)
             self.draw_page_number(num_pages)
-            print(self)
             canvas.Canvas.showPage(self)
         canvas.Canvas.save(self)
 
@@ -84,7 +82,6 @@ def get_file(setup_id):
     temp = json.dumps(setup.state)
     data = pd.read_json(StringIO(temp), orient="table")
     data.drop([".s"], axis=1, inplace=True, errors="ignore")
-    print(data.dtypes)
 
     # registers font
     reportlab.rl_config.TTFSearchPath.append(

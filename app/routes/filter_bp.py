@@ -1,7 +1,6 @@
+from app.controllers.FilterController import delete_filter, post_filter
 from flask import Blueprint
 from flask_jwt_extended import jwt_required
-
-from app.controllers.FilterController import delete_filter, post_filter
 
 # Initialize blueprint
 filter_bp = Blueprint("filter_bp", __name__)

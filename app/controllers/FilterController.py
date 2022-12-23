@@ -17,7 +17,11 @@ from flask.wrappers import Response
 # Encoder to deal with numpy Boolean values
 class CustomJSONizer(json.JSONEncoder):
     def default(self, obj):
-        return super().encode(bool(obj)) if isinstance(obj, np.bool_) else super().default(obj)
+        return (
+            super().encode(bool(obj))
+            if isinstance(obj, np.bool_)
+            else super().default(obj)
+        )
 
 
 def apply_filter(df, column, operation, value):
@@ -88,7 +92,6 @@ def post_filter(setup_id):
     column = request.json.get("column", None)
     operation = request.json.get("action", None)
     value = request.json.get("value", None)
-    print(value)
     setup = Setup.objects(id=setup_id).get()
     temp = json.dumps(setup.state)
     data = pd.read_json(StringIO(temp), orient="table")

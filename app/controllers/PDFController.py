@@ -7,6 +7,7 @@ import matplotlib
 import numpy as np
 import pandas as pd
 from app import app
+from app.controllers.utils import from_db_to_df
 from app.models.Setup import Setup
 from flask import send_file
 
@@ -79,8 +80,7 @@ def get_file(setup_id):
     # NOTE: ensure authentication
     # get current Setup
     setup = Setup.objects(id=setup_id).get()  # this query should not be like this
-    temp = json.dumps(setup.state)
-    data = pd.read_json(StringIO(temp), orient="table")
+    data = from_db_to_df(setup.sate)
     data.drop([".s"], axis=1, inplace=True, errors="ignore")
 
     # registers font

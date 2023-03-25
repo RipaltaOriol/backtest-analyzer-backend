@@ -60,3 +60,6 @@ target/
 # Other
 .env
 .DS_Store
+
+# Ignore Jupyter Notebook
+devnotebook.ipynb

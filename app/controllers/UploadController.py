@@ -2,7 +2,10 @@ import json
 
 import numpy as np
 import pandas as pd
+from app.controllers.utils import from_df_to_db
 from flask import jsonify
+
+REQUIRED_COLUMNS = ["note", "imgs"]
 
 
 def upload_default(file):
@@ -10,7 +13,7 @@ def upload_default(file):
     if file.content_type == "text/csv":
 
         # transform Dataframe
-        df = pd.read_csv(file)
+        df = pd.read_csv(file, keep_default_na=False)
 
         # if date column included it parses it
         if ".d" in df.columns:
@@ -18,9 +21,14 @@ def upload_default(file):
         # include in how-to
         # drop emtpy rows / columns
         # df.dropna(axis = 1, inplace=True)
-        df = df.to_json(orient="table")
-        df = json.loads(df)
-        return df
+
+        # add all required columns
+        df = _add_required_columns(df)
+
+        # parse images from CSV
+        df["imgs"] = df["imgs"].apply(lambda x: x.split("^") if x else [])
+
+        return from_df_to_db(df, add_index=True)
     else:
         # NOTE: change this to pass the error, otherwise it will fail
         return jsonify({"msg": "File is not an accepted format", "success": False})
@@ -47,7 +55,12 @@ def upload_mt4(file):
             new_cols.append(price_cols_name.pop())
         else:
             new_cols.append(col)
+
     df.columns = new_cols
+
+    # parse dates
+    df["Open Time"] = pd.to_datetime(df["Open Time"], format="%Y.%m.%d %H:%M:%S")
+    df["Close Time"] = pd.to_datetime(df["Open Time"], format="%Y.%m.%d %H:%M:%S")
 
     convert_dict = {
         "Size": "float",
@@ -89,6 +102,14 @@ def upload_mt4(file):
 
     df.rename(columns=rename_columns, errors="raise", inplace=True)
 
-    df = df.to_json(orient="table")
-    df = json.loads(df)
+    # add all required columns
+    df = _add_required_columns(df)
+    return from_df_to_db(df, add_index=True)
+
+
+def _add_required_columns(df):
+    for col in REQUIRED_COLUMNS:
+        if not col in df.columns:
+            df[col] = ""
+
     return df

@@ -3,6 +3,10 @@ from datetime import datetime
 from io import StringIO
 
 import pandas as pd
+from app.controllers.utils import from_db_to_df
+from app.models.Document import Document
+from app.models.Filter import Filter
+from app.models.User import User
 from bson.json_util import default, dumps
 from mongoengine.document import DynamicDocument
 from mongoengine.fields import (
@@ -13,10 +17,6 @@ from mongoengine.fields import (
     ReferenceField,
     StringField,
 )
-
-from app.models.Document import Document
-from app.models.Filter import Filter
-from app.models.User import User
 
 
 class Setup(DynamicDocument):
@@ -46,10 +46,7 @@ class Setup(DynamicDocument):
         return dumps(data)
 
     def setup_compare(self, metric):
-        temp = json.dumps(self.state)
-        data = pd.read_json(StringIO(temp), orient="table")
-        result_columns = [col for col in data if col.startswith(".r_")]
-
+        df = from_db_to_df(self.state)
         setup_compare = {
             "id": str(self.id),
             "name": self.name,
@@ -58,20 +55,20 @@ class Setup(DynamicDocument):
             "stats": {
                 # "headers": [col[3:] for col in result_columns],
                 "data": [
-                    ["Average", round(data[metric].mean(), 2)],
-                    ["Total", round(data[metric].sum(), 2)],
+                    ["Average", round(df[metric].mean(), 2)],
+                    ["Total", round(df[metric].sum(), 2)],
                 ]
             },
             "breakdown": {
                 "labels": ["Winners", "Break-Even", "Lossers"],
                 "values": [
-                    len(data[data[metric] > 0]),
-                    len(data[data[metric] == 0]),
-                    len(data[data[metric] < 0]),
+                    len(df[df[metric] > 0]),
+                    len(df[df[metric] == 0]),
+                    len(df[df[metric] < 0]),
                 ],
             },
         }
 
-        return json.dumps(setup_compare)  # , default=json_util.default)
+        return json.dumps(setup_compare)
 
     meta = {"collection": "setups", "ordering": ["-date_created"]}

@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 from app import app
 from app.controllers.ErrorController import handle_403
+from app.controllers.utils import from_db_to_df, from_df_to_db
 from app.models.Document import Document
 from app.models.Filter import Filter
 from app.models.Setup import Setup
@@ -50,11 +51,9 @@ def reset_state_from_document(setup_id):
     # establish remaining filters
     document = Document.objects(id=setup.documentId.id).get()
 
-    temp = json.dumps(document.state)
-    df = pd.read_json(StringIO(temp), orient="table")
+    df = from_db_to_df(document.state)
 
     for filter in setup.filters:
         df = apply_filter(df, filter.column, filter.operation, filter.value)
-    df = df.to_json(orient="table")
-    df = json.loads(df)
-    setup.modify(state=df)
+    state = from_df_to_db(df)
+    setup.modify(state=state)

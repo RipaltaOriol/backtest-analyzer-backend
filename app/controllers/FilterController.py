@@ -7,6 +7,7 @@ import pandas as pd
 from app import app
 from app.controllers.ErrorController import handle_403
 from app.controllers.SetupController import get_filter_options
+from app.controllers.utils import from_db_to_df, from_df_to_db
 from app.models.Document import Document
 from app.models.Filter import Filter
 from app.models.Setup import Setup
@@ -93,15 +94,13 @@ def post_filter(setup_id):
     operation = request.json.get("action", None)
     value = request.json.get("value", None)
     setup = Setup.objects(id=setup_id).get()
-    temp = json.dumps(setup.state)
-    data = pd.read_json(StringIO(temp), orient="table")
+    df = from_db_to_df(setup.state)
     if column == None or operation == None or value == None:
         return handle_403(msg="Filter is not valid")
 
-    data = apply_filter(data, column, operation, value)
+    df = apply_filter(df, column, operation, value)
     name = get_filter_name(column, operation, value)
-    df = data.to_json(orient="table")
-    df = json.loads(df)
+    state = from_df_to_db(df)
 
     filter = Filter(
         name=name,
@@ -112,7 +111,7 @@ def post_filter(setup_id):
 
     setup.filters.append(filter)
     setup.save()
-    setup.modify(state=df)
+    setup.modify(state=state)
     response = setup.to_json()
     response = json.loads(response)
     # loads options and appends them to setup
@@ -136,15 +135,13 @@ def delete_filter(setup_id, filter_id):
 
         # establish remaining filters
         document = Document.objects(id=setup.documentId.id).get()
-        temp = json.dumps(document.state)
-        df = pd.read_json(StringIO(temp), orient="table")
+        df = from_db_to_df(document.state)
 
         for filter in setup.filters:
             df = apply_filter(df, filter.column, filter.operation, filter.value)
 
-        df = df.to_json(orient="table")
-        df = json.loads(df)
-        setup.modify(state=df)
+        state = from_df_to_db(df)
+        setup.modify(state=state)
 
         # delete filter
         filter_dlt.delete()

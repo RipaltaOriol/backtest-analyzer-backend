@@ -8,6 +8,7 @@ from app import app
 from app.controllers.ErrorController import handle_403
 from app.controllers.GraphsController import get_bar, get_pie, get_scatter
 from app.controllers.setup_utils import reset_state_from_document
+from app.controllers.utils import from_db_to_df
 from app.models.Document import Document
 from app.models.Setup import Setup
 from app.models.User import User
@@ -131,11 +132,10 @@ def put_setup(setup_id):
     return jsonify({"msg": "Setup successfully updated", "success": True})
 
 
-""" Delete A Setup
-"""
-
-
 def delete_setup(setup_id):
+    """
+    Delete one Setup
+    """
     id = get_jwt_identity()
     user = User.objects(id=id["$oid"]).get()
     # get setup
@@ -147,17 +147,50 @@ def delete_setup(setup_id):
     return jsonify({"msg": "Setup successfully deleted", "success": True})
 
 
-""" Gets Setup Statistics
-"""
+def put_setup_row(setup_id, row_id):
+    """
+    Updates a specific row in a setup. An options parameter is_sync can be passed so this update
+    is reflected across all setups and the parent document itself.
+    """
+    note = request.json.get("note", None)
+    images = request.json.get("images", [])
+    lol = request.json.get("lol", None)
+    # if sync is True then update the row on all Setups & Document
+    is_sync = request.json.get("isSync", None)
+    setup = Setup.objects(id=setup_id).get()
+
+    try:
+        setup.update(__raw__={"$set": {f"state.data.{row_id}.note": note}})
+        setup.update(__raw__={"$set": {f"state.data.{row_id}.imgs": images}})
+        if is_sync:
+            # update the parent document
+            Document.objects(id=setup.documentId.id).update_one(
+                __raw__={"$set": {f"state.data.{row_id}.note": note}}
+            )
+            Document.objects(id=setup.documentId.id).update_one(
+                __raw__={"$set": {f"state.data.{row_id}.imgs": images}}
+            )
+            # update all the setups
+            Setup.objects(documentId=setup.documentId).update(
+                __raw__={"$set": {f"state.data.{row_id}.note": note}}
+            )
+            Setup.objects(documentId=setup.documentId).update(
+                __raw__={"$set": {f"state.data.{row_id}.imgs": images}}
+            )
+
+    except Exception as err:
+        return jsonify({"msg": err, "success": False})
+    return jsonify({"msg": "Setup row updated correctly!", "success": True})
 
 
 def get_statistics(setup_id):
+    """
+    Gets Setup Statistics
+    """
     id = get_jwt_identity()
     user = User.objects(id=id["$oid"]).get()
     setup = Setup.objects(author=user, id=setup_id).get()
-    # transform DictField to JSON string for Pandas to read
-    temp = json.dumps(setup.state)
-    data = pd.read_json(StringIO(temp), orient="table")
+    data = from_db_to_df(setup.state)
     result_columns = [col for col in data if col.startswith(".r_")]
 
     count = {"stat": "Count"}
@@ -236,8 +269,8 @@ def get_graphics(setup_id):
     id = get_jwt_identity()
     user = User.objects(id=id["$oid"]).get()
     setup = Setup.objects(author=user, id=setup_id).get()
-    temp = json.dumps(setup.state)
-    data = pd.read_json(StringIO(temp), orient="table")
+    data = from_db_to_df(setup.state)
+
     # data.dropna(inplace = True)
     result_names = [column for column in data.columns if column.startswith(".r_")]
 
@@ -284,8 +317,7 @@ def get_graphs(setup_id):
     id = get_jwt_identity()
     user = User.objects(id=id["$oid"]).get()
     setup = Setup.objects(author=user, id=setup_id).get()
-    temp = json.dumps(setup.state)
-    data = pd.read_json(StringIO(temp), orient="table")
+    data = from_db_to_df(setup.state)
     # data.dropna(inplace = True)
     args = request.args
     type = args.get("type")
@@ -312,11 +344,8 @@ def get_graphs(setup_id):
 
 def get_filter_options(doucment_id):
     document = Document.objects(id=doucment_id).get()
-    temp = json.dumps(document.state)
 
-    # newdf = pd.read_json(StringIO(temp))
-    data = pd.read_json(StringIO(temp), orient="table")
-    # return 'Hello'
+    data = from_db_to_df(document.state)
 
     map_types = data.dtypes
     options = []

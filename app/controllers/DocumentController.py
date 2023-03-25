@@ -1,13 +1,19 @@
 import json
 import os
 import shutil
+import uuid
 from io import StringIO
 
 import pandas as pd
 from app import app
 from app.controllers.SetupController import get_children, update_setups
 from app.controllers.UploadController import upload_default, upload_mt4
-from app.controllers.utils import parse_column_name, parse_column_type
+from app.controllers.utils import (
+    from_db_to_df,
+    from_df_to_db,
+    parse_column_name,
+    parse_column_type,
+)
 from app.models.Document import Document
 from app.models.Setup import Setup
 from app.models.User import User
@@ -19,11 +25,11 @@ source_map = {
     "mt4": "MT4",
 }
 
-""" Retrieves All Documents
-"""
-
 
 def get_documents():
+    """
+    Retrieves All Documents
+    """
     documents = []
     id = get_jwt_identity()
     user = User.objects(id=id["$oid"]).get()
@@ -36,35 +42,32 @@ def get_documents():
     return response
 
 
-""" Retreives a Document state
-"""
-
-
 def get_document(file_id):
+    """
+    Retreives a Document state
+    """
     id = get_jwt_identity()
     user = User.objects(id=id["$oid"]).get()
     file = Document.objects(id=file_id, author=user).get()
-    state = file.state
-    for col in state["schema"]["fields"]:
-        col["title"] = parse_column_name(col.get("name"))
-        col["field"] = col.pop("name")
+    # for col in state["schema"]["fields"]:
+    #     col["title"] = parse_column_name(col.get("name"))
+    #     col["field"] = col.pop("name")
 
     response = {"id": str(file.id), "name": file.name, "state": file.state}
     response = jsonify(response)
     return response
 
 
-""" Retrieves a Document columns
-"""
-
-
 def get_document_columns(file_id):
+    """
+    Retrieves a Document columns
+    """
     id = get_jwt_identity()
     user = User.objects(id=id["$oid"]).get()
     file = Document.objects(id=file_id, author=user).get()
-    temp = json.dumps(file.state)
-    data = pd.read_json(StringIO(temp), orient="table")
-    data_columns = data.dtypes
+    df = from_db_to_df(file.state)
+
+    data_columns = df.dtypes
     columns = []
     for name, col_type in data_columns.items():
         columns.append(
@@ -78,19 +81,17 @@ def get_document_columns(file_id):
     return response
 
 
-""" Retrieves a Document w/ Setups (compare)
-"""
-
-
 def get_document_compare(file_id):
+    """
+    Retrieves a Document w/ Setups (compare)
+    """
     id = get_jwt_identity()
     metric = request.args.get("metric", None)
     user = User.objects(id=id["$oid"]).get()
     setups = Setup.objects(author=user, documentId=file_id).order_by("-date_created")
     # implied that column names will not differ between setups and its document
-    temp = json.dumps(setups[0].state)
-    data = pd.read_json(StringIO(temp), orient="table")
-    metric_list = [col for col in data if col.startswith(".r_")]
+    df = from_db_to_df(setups[0].state)
+    metric_list = [col for col in df if col.startswith(".r_")]
     metric = metric_list[0] if metric is None else metric
 
     setups_compared = []
@@ -109,11 +110,8 @@ def get_document_compare(file_id):
     return response
 
 
-""" Update Doucment
-"""
-
-
 def put_document(file_id):
+    """Update Doucment"""
     id = get_jwt_identity()
     user = User.objects(id=id["$oid"]).get()
     # get the document and its new name
@@ -124,12 +122,8 @@ def put_document(file_id):
     return jsonify({"msg": "Document successfully updated", "success": True})
 
 
-""" Upload Document
-"""
-
-
 def post_document():
-
+    """Upload Document"""
     id = get_jwt_identity()
     user = User.objects(id=id["$oid"]).get()
     # get file
@@ -163,12 +157,11 @@ def post_document():
     return jsonify({"msg": "Document successfully uploaded", "success": True})
 
 
-""" Duplicates Existing File
-    NOTE: It could be abstracted
-"""
-
-
 def clone_document(file_id):
+    """
+    Duplicates Existing File
+    NOTE: It could be abstracted
+    """
     id = get_jwt_identity()
     user = User.objects(id=id["$oid"]).get()
     # get the document and initialise a counter
@@ -184,58 +177,59 @@ def clone_document(file_id):
         new_name = original + " Copy_" + str(copy_counter)
         is_file_exists = Document.objects(name=new_name)
 
+    new_df = from_df_to_db(from_db_to_df(file.state), add_index=True)
     # save the copy to the DB
-    document = Document(
-        name=new_name, author=user, state=file.state, source=file.source
-    )
+    document = Document(name=new_name, author=user, state=new_df, source=file.source)
     document.save()
     # save the default setup to the DB
     setup = Setup(
-        name="Default", author=user, documentId=document, default=True, state=file.state
+        name="Default", author=user, documentId=document, default=True, state=new_df
     )
     setup.save()
     return jsonify({"msg": "Document successfully copied", "success": True})
 
 
-""" Updates an except document
-"""
-
-
 def update_document(file_id):
+    """
+    Updates a Document by either: add, update or delete a given row
+
+    INFO: this function could be abstracted
+    """
     method = request.json.get("method", None)
     data = request.json.get("data", None)
 
     file = Document.objects(id=file_id).get()
-    # transform DictField to JSON string for Pandas to read
-    temp = json.dumps(file.state)
-    df = pd.read_json(StringIO(temp), orient="table")
 
     if method == "add":
+        # create index for new row
+        index = uuid.uuid4().hex
+        # remove unnecessary keys from row
         new_row = {i: data[i] for i in data if i not in {".d", "index", "tableData"}}
-        df = df.append(new_row, ignore_index=True)
+        Document.objects(id=file_id).update(
+            __raw__={"$set": {f"state.data.{index}": new_row}}
+        )
 
     elif method == "update":
+
         index = data.get("index")
+        # remove unnecessary keys from row
         updated_row = {
             i: data[i] for i in data if i not in {".d", "index", "tableData"}
         }
-
-        df.iloc[index] = updated_row
+        Document.objects(id=file_id).update(
+            __raw__={"$set": {f"state.data.{index}": updated_row}}
+        )
 
     elif method == "delete":
-
         index = data.get("index")
         try:
-            df = df.drop([index + 1])
-        except:
-            return jsonify({"msg": "This row does not exist.", "success": False})
-
+            Document.objects(id=file_id).update_one(
+                __raw__={"$unset": {f"state.data.{index}": 1}}
+            )
+        except Exception as err:
+            return jsonify({"msg": err, "success": False})
     else:
         return jsonify({"msg": "Something went wrong. Try again!", "success": False})
-
-    df = df.to_json(orient="table")
-    df = json.loads(df)
-    file.modify(state=df)
 
     try:
         update_setups(file.id)
@@ -245,12 +239,11 @@ def update_document(file_id):
     return jsonify({"msg": "Document updated correctly!", "success": True})
 
 
-""" Delete Document
-NOTE: make sure document belongs to the author
-"""
-
-
 def delete_document(file_id):
+    """
+    Delete Document
+    NOTE: make sure document belongs to the author
+    """
     id = get_jwt_identity()
     user = User.objects(id=id["$oid"]).get()
     # get the document

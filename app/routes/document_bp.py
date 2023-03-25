@@ -1,6 +1,3 @@
-from flask import Blueprint
-from flask_jwt_extended import jwt_required
-
 from app.controllers.DocumentController import (
     clone_document,
     delete_document,
@@ -12,6 +9,8 @@ from app.controllers.DocumentController import (
     put_document,
     update_document,
 )
+from flask import Blueprint
+from flask_jwt_extended import jwt_required
 
 # Initialize blueprint
 document_bp = Blueprint("document_bp", __name__)

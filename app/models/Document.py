@@ -1,9 +1,8 @@
 from datetime import datetime
 
+from app.models.User import User
 from mongoengine.document import DynamicDocument
 from mongoengine.fields import DateTimeField, DictField, ReferenceField, StringField
-
-from app.models.User import User
 
 
 class Document(DynamicDocument):

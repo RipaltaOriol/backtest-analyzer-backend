@@ -20,11 +20,11 @@ def get_scatter(df, result_columns, metric_columns):
     if metric_num == None:
         return "Bad"
 
-    labels = {"title": f"{metric_num[3:]} to Results", "axes": metric_num[3:]}
+    labels = {"title": f"{metric_num[6:]} to Results", "axes": metric_num[6:]}
 
     for res in result_columns:
         dataset = {
-            "label": res[3:],
+            "label": res[6:],
             "data": [
                 {"x": round(df.loc[i, metric_num], 3), "y": round(df.loc[i, res], 3)}
                 for i in df.index
@@ -48,7 +48,7 @@ def get_bar(df, result_columns, metric_columns):
     if metric_str == None:
         return "Bad"
 
-    labels = {"title": f"{metric_str[3:]} by Result", "axes": metric_str[3:]}
+    labels = {"title": f"{metric_str[6:]} by Result", "axes": metric_str[6:]}
 
     df_category = df.groupby(metric_str).sum()
 
@@ -57,7 +57,7 @@ def get_bar(df, result_columns, metric_columns):
     for res in result_columns:
         data.append(
             {
-                "label": res[3:],
+                "label": res[6:],
                 "data": [
                     round(df_category.loc[cat, res], 3) for cat in df_category.index
                 ],
@@ -79,7 +79,7 @@ def get_pie(df, result_column):
 
     return jsonify(
         {
-            "title": result_column[0][3:] + " by Outcome Distribution",
+            "title": result_column[0][6:] + " by Outcome Distribution",
             "data": [pie],
             "labels": ["Winners", "Break-Even", "Lossers"],
         }

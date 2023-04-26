@@ -1,26 +1,35 @@
 import json
 import uuid
+from datetime import date, datetime
 from io import StringIO
 
 import pandas as pd
 
 
+def json_serial(obj):
+    """JSON serializer for objects not serializable by default json code"""
+
+    if isinstance(obj, (datetime, date)):
+        return obj.isoformat()
+    raise TypeError("Type %s not serializable" % type(obj))
+
+
 def parse_column_name(column_name):
     if (
-        column_name.startswith(".m_")
-        or column_name.startswith(".r_")
-        or column_name.startswith(".d_")
+        column_name.startswith("col_m_")
+        or column_name.startswith("col_r_")
+        or column_name.startswith("col_d_")
     ):
-        column_name = column_name[3:]
-    elif column_name == ".tp":
+        column_name = column_name[6:]
+    elif column_name == "col_tp":
         column_name = "Take Profit"
-    elif column_name == ".sl":
+    elif column_name == "col_sl":
         column_name = "Stop Loss"
-    elif column_name == ".o":
+    elif column_name == "col_o":
         column_name = "Open"
-    elif column_name == ".c":
+    elif column_name == "col_c":
         column_name = "Close"
-    elif column_name == ".p":
+    elif column_name == "col_p":
         column_name = "Pair"
 
     return column_name
@@ -39,8 +48,8 @@ def from_db_to_df(state):
     """
     This methods converts a table from the database into a dataframe.
     """
-    parsed_state = json.dumps(state["data"])
-    # I personally do not like havving StringIO because I don't understand why is it necessary
+    parsed_state = json.dumps(state["data"], default=json_serial)
+    # I personally do not like having StringIO because I don't understand why is it necessary
     # although it doesn't work without it. Root problem from imgs being [] in json.
     return pd.read_json(StringIO(parsed_state), orient="index")
 

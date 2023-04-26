@@ -191,7 +191,7 @@ def get_statistics(setup_id):
     user = User.objects(id=id["$oid"]).get()
     setup = Setup.objects(author=user, id=setup_id).get()
     data = from_db_to_df(setup.state)
-    result_columns = [col for col in data if col.startswith(".r_")]
+    result_columns = [col for col in data if col.startswith("col_r_")]
 
     count = {"stat": "Count"}
     total = {"stat": "Total"}
@@ -259,20 +259,19 @@ def get_statistics(setup_id):
     return response
 
 
-""" Get Setup Chart
-    NOTE: needs some rethinking - probably move to different file
-    NOTE: think of a method for data sanitization to drop NaN values so it does not break 
-"""
-
-
 def get_graphics(setup_id):
+    """
+    Get Setup Chart
+    NOTE: needs some rethinking - probably move to different file
+    NOTE: think of a method for data sanitization to drop NaN values so it does not break
+    """
     id = get_jwt_identity()
     user = User.objects(id=id["$oid"]).get()
     setup = Setup.objects(author=user, id=setup_id).get()
     data = from_db_to_df(setup.state)
 
     # data.dropna(inplace = True)
-    result_names = [column for column in data.columns if column.startswith(".r_")]
+    result_names = [column for column in data.columns if column.startswith("col_r_")]
 
     # line chart
     datasets = []
@@ -286,7 +285,7 @@ def get_graphics(setup_id):
                 points.append(
                     points[i - 1] + points[i - 1] * 0.01 * data[column].iloc[i]
                 )
-        datasets.append({"name": column[3:], "values": points})
+        datasets.append({"name": column[6:], "values": points})
 
     line = {
         "name": "$" + str(equity) + " Equity Simlutaion",
@@ -296,7 +295,7 @@ def get_graphics(setup_id):
 
     # NOTE: this can be done more effiently
     pie = {
-        "name": result_names[0][3:] + " by Outcome Distribution",
+        "name": result_names[0][6:] + " by Outcome Distribution",
         "labels": ["Winners", "Break-Even", "Lossers"],
         "values": [
             len(data[data[result_names[0]] > 0]),
@@ -309,11 +308,10 @@ def get_graphics(setup_id):
     return response
 
 
-""" Gets Setups Graphs
-"""
-
-
 def get_graphs(setup_id):
+    """
+    Gets Setups Graphs
+    """
     id = get_jwt_identity()
     user = User.objects(id=id["$oid"]).get()
     setup = Setup.objects(author=user, id=setup_id).get()
@@ -326,8 +324,8 @@ def get_graphs(setup_id):
         # throw exeption
         return "Bad"
 
-    result_columns = [column for column in data.columns if column.startswith(".r_")]
-    metric_columns = [col for col in data if col.startswith(".m_")]
+    result_columns = [column for column in data.columns if column.startswith("col_r_")]
+    metric_columns = [col for col in data if col.startswith("col_m_")]
 
     if type == "scatter":
         return get_scatter(data, result_columns, metric_columns)
@@ -338,11 +336,10 @@ def get_graphs(setup_id):
     return "Bad"
 
 
-""" Gets Setup Filter Options
-"""
-
-
 def get_filter_options(doucment_id):
+    """
+    Gets Setup Filter Options
+    """
     document = Document.objects(id=doucment_id).get()
 
     data = from_db_to_df(document.state)
@@ -350,15 +347,15 @@ def get_filter_options(doucment_id):
     map_types = data.dtypes
     options = []
     for column in data.columns:
-        if column.startswith(".m_"):
-            option = {"id": column, "name": column[3:]}
+        if column.startswith("col_m_"):
+            option = {"id": column, "name": column[6:]}
             if map_types[column] == "float64" or map_types[column] == "int64":
                 option.update(type="number")
             else:
                 option.update(type="string")
                 option.update(values=list(data[column].dropna().unique()))
             options.append(option)
-        if column.startswith(".p"):
+        if column.startswith("col_p"):
             option = {
                 "id": column,
                 "name": "Pair",
@@ -370,11 +367,10 @@ def get_filter_options(doucment_id):
     return options
 
 
-""" Updates the setups state from parent state
-"""
-
-
 def update_setups(document_id):
+    """
+    Updates the setups state from parent state
+    """
     setups = Setup.objects(documentId=document_id)
     for setup in setups:
         reset_state_from_document(setup.id)
@@ -383,6 +379,11 @@ def update_setups(document_id):
 def get_children(document_id):
     setups = Setup.objects(documentId=document_id).order_by("-date_created")
     return [
-        {"id": str(setup.id), "name": setup.name, "date": setup.date_created}
+        {
+            "id": str(setup.id),
+            "name": setup.name,
+            "date": setup.date_created,
+            "isDefault": setup.default,
+        }
         for setup in setups
     ]

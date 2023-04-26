@@ -64,10 +64,10 @@ def get_filter_name(column, operation, value):
     # initialise the name variable
     name = ""
     # get the column
-    if column.startswith(".p"):
+    if column.startswith("col_p"):
         name += "Pair"
     else:
-        name += column[3:]
+        name += column[6:]
     if operation == "gt":
         name += " greater than "
     elif operation == "lt":

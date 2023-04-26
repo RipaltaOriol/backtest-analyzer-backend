@@ -53,7 +53,6 @@ class Setup(DynamicDocument):
             "date_created": self.date_created.isoformat(),
             "filters": [str(filter.name) for filter in self.filters],
             "stats": {
-                # "headers": [col[3:] for col in result_columns],
                 "data": [
                     ["Average", round(df[metric].mean(), 2)],
                     ["Total", round(df[metric].sum(), 2)],

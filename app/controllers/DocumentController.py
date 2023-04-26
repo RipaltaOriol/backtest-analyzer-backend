@@ -204,24 +204,21 @@ def update_document(file_id):
         # create index for new row
         index = uuid.uuid4().hex
         # remove unnecessary keys from row
-        new_row = {i: data[i] for i in data if i not in {".d", "index", "tableData"}}
+        data.pop("rowId", None)
         Document.objects(id=file_id).update(
-            __raw__={"$set": {f"state.data.{index}": new_row}}
+            __raw__={"$set": {f"state.data.{index}": data}}
         )
 
     elif method == "update":
-
-        index = data.get("index")
+        index = data.get("rowId")
         # remove unnecessary keys from row
-        updated_row = {
-            i: data[i] for i in data if i not in {".d", "index", "tableData"}
-        }
+        data.pop("rowId", None)
         Document.objects(id=file_id).update(
-            __raw__={"$set": {f"state.data.{index}": updated_row}}
+            __raw__={"$set": {f"state.data.{index}": data}}
         )
 
     elif method == "delete":
-        index = data.get("index")
+        index = data.get("rowId")
         try:
             Document.objects(id=file_id).update_one(
                 __raw__={"$unset": {f"state.data.{index}": 1}}

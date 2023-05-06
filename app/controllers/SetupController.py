@@ -369,9 +369,7 @@ def update_setups(document_id):
     Updates the setups state from parent state
     """
     setups = Setup.objects(documentId=document_id)
-    print(len(setups))
     for setup in setups:
-        print("gets here")
         reset_state_from_document(setup.id)
 
 

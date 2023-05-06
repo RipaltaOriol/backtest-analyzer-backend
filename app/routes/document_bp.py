@@ -1,6 +1,7 @@
 from app.controllers.DocumentController import (
     clone_document,
     delete_document,
+    get_calendar_table,
     get_document,
     get_document_columns,
     get_document_compare,
@@ -30,3 +31,7 @@ document_bp.route("/<file_id>/compare", methods=["GET"])(
     jwt_required()(get_document_compare)
 )
 document_bp.route("/<file_id>/update", methods=["PUT"])(jwt_required()(update_document))
+
+document_bp.route("/<document_id>/calendar", methods=["GET"])(
+    jwt_required()(get_calendar_table)
+)

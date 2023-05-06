@@ -44,14 +44,15 @@ def parse_column_type(column_type):
         return str(column_type)
 
 
-def from_db_to_df(state):
+def from_db_to_df(state, orient="index"):
     """
-    This methods converts a table from the database into a dataframe.
+    This methods converts a table from the database into a dataframe. It takes an
+    orientation as an optional parameter which defaults to "index".
     """
     parsed_state = json.dumps(state["data"], default=json_serial)
     # I personally do not like having StringIO because I don't understand why is it necessary
     # although it doesn't work without it. Root problem from imgs being [] in json.
-    return pd.read_json(StringIO(parsed_state), orient="index")
+    return pd.read_json(StringIO(parsed_state), orient=orient)
 
 
 def from_df_to_db(df, add_index=False):

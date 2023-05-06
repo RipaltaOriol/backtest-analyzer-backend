@@ -27,11 +27,8 @@ class CustomJSONizer(json.JSONEncoder):
         )
 
 
-""" Retrieves All Setups
-"""
-
-
 def get_setups():
+    """Retrieves All Setups"""
     id = get_jwt_identity()
     user = User.objects(id=id["$oid"]).get()
     setups = Setup.objects(author=user)

@@ -91,7 +91,7 @@ def get_document_compare(file_id):
     setups = Setup.objects(author=user, documentId=file_id).order_by("-date_created")
     # implied that column names will not differ between setups and its document
     df = from_db_to_df(setups[0].state)
-    metric_list = [col for col in df if col.startswith(".r_")]
+    metric_list = [col for col in df if col.startswith("col_r_")]
     metric = metric_list[0] if metric is None else metric
 
     setups_compared = []
@@ -104,6 +104,36 @@ def get_document_compare(file_id):
         "data": setups_compared,
         "metrics": [[metric, parse_column_name(metric)] for metric in metric_list],
         "active": parse_column_name(metric),
+    }
+
+    response = jsonify(response)
+    return response
+
+
+def get_calendar_table(document_id):
+    """
+    Returns a calendar view for a given document. As well as options and selected metric for result and date display.
+    """
+    metric = request.args.get("metric", None)
+    date = request.args.get("date", None)
+    print(date)
+    document = Document.objects(id=document_id).get()
+    df = from_db_to_df(document.state, orient="index")
+    # TODO: combine both loops into a single
+    metric_list = [col for col in df if col.startswith("col_r")]
+    # TODO: is it col_r or col_r_
+    date_list = [col for col in df if col.startswith("col_d")]
+    metric = metric_list[0] if metric is None else metric
+    date = date_list[0] if date is None else date
+    # Reset index to get the index column passed in to the JSON
+    table = df.reset_index().to_json(orient="records")
+    table = json.loads(table)
+    response = {
+        "table": table,
+        "metrics": [[metric, parse_column_name(metric)] for metric in metric_list],
+        "active_metric": metric,
+        "active_date": date,
+        "dates": [[date, parse_column_name(date)] for date in date_list],
     }
 
     response = jsonify(response)
@@ -224,13 +254,15 @@ def update_document(file_id):
                 __raw__={"$unset": {f"state.data.{index}": 1}}
             )
         except Exception as err:
-            return jsonify({"msg": err, "success": False})
+            return jsonify(
+                {"msg": err, "success": False}
+            )  # not sure this is good practice
     else:
         return jsonify({"msg": "Something went wrong. Try again!", "success": False})
 
     try:
         update_setups(file.id)
-    except:
+    except Exception as err:
         return jsonify({"msg": "Something went wrong. Try again!", "success": False})
 
     return jsonify({"msg": "Document updated correctly!", "success": True})

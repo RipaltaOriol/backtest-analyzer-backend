@@ -22,10 +22,10 @@ def apply_filter(df, column, operation, value):
         if df.dtypes[column] == "bool" and len(value) == 1:
             # convert string 'true' or 'false' to bool
             value_bool = value[0] == "true"
-        if operation == "in":
-            df = df[df[column] == value_bool]
-        elif operation == "nin":
-            df = df[df[column] != value_bool]
+            if operation == "in":
+                df = df[df[column] == value_bool]
+            elif operation == "nin":
+                df = df[df[column] != value_bool]
         else:
             if operation == "in":
                 df = df[df[column].isin(value)]
@@ -52,7 +52,6 @@ def reset_state_from_document(setup_id):
     document = Document.objects(id=setup.documentId.id).get()
 
     df = from_db_to_df(document.state)
-
     for filter in setup.filters:
         df = apply_filter(df, filter.column, filter.operation, filter.value)
     state = from_df_to_db(df)

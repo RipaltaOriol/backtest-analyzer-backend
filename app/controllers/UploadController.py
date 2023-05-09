@@ -59,8 +59,10 @@ def upload_mt4(file):
     df.columns = new_cols
 
     # parse dates
-    df["Open Time"] = pd.to_datetime(df["Open Time"], format="%Y.%m.%d %H:%M:%S")
-    df["Close Time"] = pd.to_datetime(df["Open Time"], format="%Y.%m.%d %H:%M:%S")
+    df.loc[:, "Open Time"] = pd.to_datetime(df["Open Time"], format="%Y.%m.%d %H:%M:%S")
+    df.loc[:, "Close Time"] = pd.to_datetime(
+        df["Open Time"], format="%Y.%m.%d %H:%M:%S"
+    )
 
     convert_dict = {
         "Size": "float",
@@ -76,12 +78,12 @@ def upload_mt4(file):
 
     # change column types
     for col in convert_dict:
-        df[col] = df[col].apply(lambda x: str(x).replace(" ", ""))
+        df.loc[:, col] = df[col].apply(lambda x: str(x).replace(" ", ""))
 
     df = df.astype(convert_dict)
 
     for col in ["Open Time", "Close Time"]:
-        df[col] = pd.to_datetime(df[col])
+        df.loc[:, col] = pd.to_datetime(df[col])
 
     rename_columns = {
         "Ticket": "#",

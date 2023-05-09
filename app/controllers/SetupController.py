@@ -201,7 +201,7 @@ def get_statistics(setup_id):
     expectancy = {"stat": "Expectancy"}
     max_consec_loss = {"stat": "Max. Consecutive Losses"}
     max_win = {"stat": "Maximum Win"}
-
+    print(result_columns)
     for col in result_columns:
         count[col] = 0
         total[col] = 0
@@ -213,6 +213,9 @@ def get_statistics(setup_id):
         consecutive_losses = 0
         current_losses = 0
         for val in data[col]:
+            # skip NaN values
+            if pd.isna(val):
+                continue
             count[col] += 1
             total[col] += val
             if val > 0:
@@ -251,7 +254,6 @@ def get_statistics(setup_id):
         max_consec_loss,
         max_win,
     ]
-
     response = jsonify(statistics)
     return response
 

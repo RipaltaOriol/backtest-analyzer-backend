@@ -201,7 +201,6 @@ def get_statistics(setup_id):
     expectancy = {"stat": "Expectancy"}
     max_consec_loss = {"stat": "Max. Consecutive Losses"}
     max_win = {"stat": "Maximum Win"}
-    print(result_columns)
     for col in result_columns:
         count[col] = 0
         total[col] = 0

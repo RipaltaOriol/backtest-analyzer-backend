@@ -2,6 +2,7 @@ import json
 
 import numpy as np
 import pandas as pd
+from app.controllers.errors import UploadError
 from app.controllers.utils import from_df_to_db
 from flask import jsonify
 
@@ -18,9 +19,15 @@ def upload_default(file):
         # if date column included it parses it
         if ".d" in df.columns:
             df[".d"] = pd.to_datetime(df[".d"])
-        # include in how-to
-        # drop emtpy rows / columns
-        # df.dropna(axis = 1, inplace=True)
+
+        # TODO: include in documentation
+        df = df.replace("", np.nan)
+        df_nans = np.where(pd.isnull(df))
+        is_df_contains_nan = len(df_nans[0]) > 0
+        if is_df_contains_nan:
+            raise UploadError(
+                "File contains empty cells. Remove them or fix them before resubmit."
+            )
 
         # add all required columns
         df = _add_required_columns(df)
@@ -103,6 +110,15 @@ def upload_mt4(file):
     }
 
     df.rename(columns=rename_columns, errors="raise", inplace=True)
+
+    # TODO: include in documentation
+    df = df.replace("", np.nan)
+    df_nans = np.where(pd.isnull(df))
+    is_df_contains_nan = len(df_nans[0]) > 0
+    if is_df_contains_nan:
+        raise UploadError(
+            "File contains empty cells. Remove them or fix them before resubmit."
+        )
 
     # add all required columns
     df = _add_required_columns(df)

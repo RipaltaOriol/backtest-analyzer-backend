@@ -6,6 +6,7 @@ from io import StringIO
 
 import pandas as pd
 from app import app
+from app.controllers.errors import UploadError
 from app.controllers.SetupController import get_children, update_setups
 from app.controllers.UploadController import upload_default, upload_mt4
 from app.controllers.utils import (
@@ -165,13 +166,17 @@ def post_document():
     is_file_exists = Document.objects(name=file.filename, author=user)
     if len(is_file_exists) > 0:
         return jsonify({"msg": "This file already exists", "success": False})
-
-    if file_source == "default":
-        df = upload_default(file)
-    elif file_source == "mt4":
-        df = upload_mt4(file)
-    else:
-        return jsonify({"msg": "File source could not be identified", "success": False})
+    try:
+        if file_source == "default":
+            df = upload_default(file)
+        elif file_source == "mt4":
+            df = upload_mt4(file)
+        else:
+            return jsonify(
+                {"msg": "File source could not be identified", "success": False}
+            )
+    except UploadError as err:
+        return jsonify({"msg": err.message, "success": False})
 
     # save the file to the DB
     document = Document(

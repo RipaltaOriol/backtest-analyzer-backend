@@ -212,9 +212,11 @@ def get_statistics(setup_id):
         consecutive_losses = 0
         current_losses = 0
         for val in data[col]:
+            # TODO: add this when efficiently detecting misplaced values
             # skip NaN values
-            if pd.isna(val):
-                continue
+            # if pd.isna(val):
+            #     continue
+            print(val)
             count[col] += 1
             total[col] += val
             if val > 0:

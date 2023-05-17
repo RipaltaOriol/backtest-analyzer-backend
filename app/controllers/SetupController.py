@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 from app import app
 from app.controllers.ErrorController import handle_403
-from app.controllers.GraphsController import get_bar, get_pie, get_scatter
+from app.controllers.GraphsController import get_bar, get_line, get_pie, get_scatter
 from app.controllers.setup_utils import reset_state_from_document
 from app.controllers.utils import from_db_to_df
 from app.models.Document import Document
@@ -192,6 +192,7 @@ def get_statistics(setup_id):
 
     count = {"stat": "Count"}
     total = {"stat": "Total"}
+    mean = {"stat": "Mean"}
     wins = {"stat": "Wins"}
     losses = {"stat": "Losses"}
     break_even = {"stat": "Break Even"}
@@ -201,6 +202,7 @@ def get_statistics(setup_id):
     expectancy = {"stat": "Expectancy"}
     max_consec_loss = {"stat": "Max. Consecutive Losses"}
     max_win = {"stat": "Maximum Win"}
+    drawdown = {"stat": "Drawdown"}
     for col in result_columns:
         count[col] = 0
         total[col] = 0
@@ -216,7 +218,6 @@ def get_statistics(setup_id):
             # skip NaN values
             # if pd.isna(val):
             #     continue
-            print(val)
             count[col] += 1
             total[col] += val
             if val > 0:
@@ -232,7 +233,12 @@ def get_statistics(setup_id):
                 break_even[col] += 1
                 consecutive_losses = max(consecutive_losses, current_losses)
                 current_losses = 0
+        data["cumulative"] = data[col].cumsum().round(2)
+        data["high_value"] = data["cumulative"].cummax()
+        data["drawdown"] = data["cumulative"] - data["high_value"]
+        drawdown[col] = data["drawdown"].min()
         total[col] = round(total[col], 3)
+        mean[col] = total[col] / count[col]
         win_rate[col] = wins[col] / count[col]
         avg_win[col] = total_wins / wins[col] if wins[col] else 0
         avg_loss[col] = total_losses / losses[col] if losses[col] else 0
@@ -245,6 +251,7 @@ def get_statistics(setup_id):
     statistics = [
         count,
         total,
+        mean,
         wins,
         losses,
         break_even,
@@ -254,6 +261,7 @@ def get_statistics(setup_id):
         expectancy,
         max_consec_loss,
         max_win,
+        drawdown,
     ]
     response = jsonify(statistics)
     return response
@@ -319,7 +327,7 @@ def get_graphs(setup_id):
     # data.dropna(inplace = True)
     args = request.args
     type = args.get("type")
-
+    current_metric = args.get("currentMetric")
     if not type:
         # throw exeption
         return "Bad"
@@ -328,11 +336,13 @@ def get_graphs(setup_id):
     metric_columns = [col for col in data if col.startswith("col_m_")]
 
     if type == "scatter":
-        return get_scatter(data, result_columns, metric_columns)
+        return get_scatter(data, result_columns, metric_columns, current_metric)
     if type == "bar":
-        return get_bar(data, result_columns, metric_columns)
+        return get_bar(data, result_columns, metric_columns, current_metric)
     if type == "pie":
         return get_pie(data, result_columns)
+    if type == "line":
+        return get_line(data, result_columns, current_metric)
     return "Bad"
 
 

@@ -117,7 +117,6 @@ def get_calendar_table(document_id):
     """
     metric = request.args.get("metric", None)
     date = request.args.get("date", None)
-    print(date)
     document = Document.objects(id=document_id).get()
     df = from_db_to_df(document.state, orient="index")
     # TODO: combine both loops into a single

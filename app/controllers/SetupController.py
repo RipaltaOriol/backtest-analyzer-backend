@@ -1,5 +1,6 @@
 import json
 import os
+import re
 from io import StringIO
 
 import numpy as np
@@ -188,7 +189,7 @@ def get_statistics(setup_id):
     user = User.objects(id=id["$oid"]).get()
     setup = Setup.objects(author=user, id=setup_id).get()
     data = from_db_to_df(setup.state)
-    result_columns = [col for col in data if col.startswith("col_r_")]
+    result_columns = [col for col in data if re.match(r"col_[vpr]_", col)]
 
     count = {"stat": "Count"}
     total = {"stat": "Total"}
@@ -279,27 +280,9 @@ def get_graphics(setup_id):
     data = from_db_to_df(setup.state)
 
     # data.dropna(inplace = True)
-    result_names = [column for column in data.columns if column.startswith("col_r_")]
-
-    # line chart
-    datasets = []
-    for column in result_names:
-        equity = 1000
-        points = []
-        for i in range(len(data[column])):
-            if i == 0:
-                points.append(equity + equity * 0.01 * data[column].iloc[i])
-            else:
-                points.append(
-                    points[i - 1] + points[i - 1] * 0.01 * data[column].iloc[i]
-                )
-        datasets.append({"name": column[6:], "values": points})
-
-    line = {
-        "name": "$" + str(equity) + " Equity Simlutaion",
-        "labels": list(range(1, 1 + len(data[result_names[0]]))),
-        "datasets": datasets,
-    }
+    result_names = [
+        column for column in data.columns if re.match(r"col_[vpr]_", column)
+    ]
 
     # NOTE: this can be done more effiently
     pie = {
@@ -312,7 +295,7 @@ def get_graphics(setup_id):
         ],
     }
 
-    response = jsonify(line=line, pie=pie)
+    response = jsonify(pie=pie)
     return response
 
 
@@ -332,8 +315,13 @@ def get_graphs(setup_id):
         # throw exeption
         return "Bad"
 
-    result_columns = [column for column in data.columns if column.startswith("col_r_")]
+    result_columns = [
+        column for column in data.columns if re.match(r"col_[vpr]_", column)
+    ]
     metric_columns = [col for col in data if col.startswith("col_m_")]
+
+    if "col_rr" in data.columns:
+        metric_columns.append("col_rr")
 
     if type == "scatter":
         return get_scatter(data, result_columns, metric_columns, current_metric)
@@ -370,6 +358,14 @@ def get_filter_options(doucment_id):
                 "id": column,
                 "name": "Pair",
                 "type": "string",
+                "values": list(data[column].dropna().unique()),
+            }
+            options.append(option)
+        if column.startswith("col_rr"):
+            option = {
+                "id": column,
+                "name": "Risk Reward",
+                "type": "number",
                 "values": list(data[column].dropna().unique()),
             }
             options.append(option)

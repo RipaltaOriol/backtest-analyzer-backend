@@ -66,6 +66,8 @@ def get_filter_name(column, operation, value):
     # get the column
     if column.startswith("col_p"):
         name += "Pair"
+    elif column.startswith("col_rr"):
+        name += "Risk Reward"
     else:
         name += column[6:]
     if operation == "gt":

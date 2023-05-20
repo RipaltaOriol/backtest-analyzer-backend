@@ -106,7 +106,7 @@ def upload_mt4(file):
         "Commission": "col_m_Commision",
         "Taxes": "col_m_Taxes",
         "Swap": "col_m_Swap",
-        "Profit": "col_r_Profit",
+        "Profit": "col_v_Profit",
     }
 
     df.rename(columns=rename_columns, errors="raise", inplace=True)

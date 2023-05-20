@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import shutil
 import uuid
 from io import StringIO
@@ -92,7 +93,7 @@ def get_document_compare(file_id):
     setups = Setup.objects(author=user, documentId=file_id).order_by("-date_created")
     # implied that column names will not differ between setups and its document
     df = from_db_to_df(setups[0].state)
-    metric_list = [col for col in df if col.startswith("col_r_")]
+    metric_list = [col for col in df if re.match(r"col_[vpr]_", col)]
     metric = metric_list[0] if metric is None else metric
 
     setups_compared = []
@@ -120,7 +121,7 @@ def get_calendar_table(document_id):
     document = Document.objects(id=document_id).get()
     df = from_db_to_df(document.state, orient="index")
     # TODO: combine both loops into a single
-    metric_list = [col for col in df if col.startswith("col_r")]
+    metric_list = [col for col in df if re.match(r"col_[vpr]_", col)]
     # TODO: is it col_r or col_r_
     date_list = [col for col in df if col.startswith("col_d")]
     metric = metric_list[0] if metric is None else metric

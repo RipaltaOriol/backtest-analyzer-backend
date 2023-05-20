@@ -19,6 +19,8 @@ def parse_column_name(column_name):
         column_name.startswith("col_m_")
         or column_name.startswith("col_r_")
         or column_name.startswith("col_d_")
+        or column_name.startswith("col_p_")
+        or column_name.startswith("col_v_")
     ):
         column_name = column_name[6:]
     elif column_name == "col_tp":
@@ -31,8 +33,16 @@ def parse_column_name(column_name):
         column_name = "Close"
     elif column_name == "col_p":
         column_name = "Pair"
+    elif column_name == "col_rr":
+        column_name = "Risk Reward"
 
     return column_name
+
+
+def normalize_results(val, result):
+    if result.startswith("col_p_"):
+        return val * 100
+    return val
 
 
 def parse_column_type(column_type):

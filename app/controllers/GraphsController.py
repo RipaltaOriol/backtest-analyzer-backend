@@ -1,7 +1,19 @@
 from datetime import datetime
 
-from app.controllers.utils import parse_column_name
+from app.controllers.utils import normalize_results, parse_column_name
 from flask import jsonify
+
+
+def calculate_equity(equity: int, value: int, method: str) -> int:
+    """
+    Calculates the equity value given a value (next result) and a method.
+    """
+    if method == "risk_reward":
+        return equity + equity * 0.01 * value
+    elif method == "percentage":
+        return equity + equity * value
+    else:  # default method is aboslute profit value
+        return equity + value
 
 
 # TODO: some of this code can be abstracted
@@ -11,7 +23,6 @@ def get_line(df, result_columns, current_metric: str) -> str:
     The current_metric can be 'default' which indicates that no date metric is being used.
     As a result, we will return the trades numbered in the order that they are stored in the database.
     """
-    equity = 10000
     datasets = []
     metric_date = None
 
@@ -25,18 +36,24 @@ def get_line(df, result_columns, current_metric: str) -> str:
         return "Bad"
 
     for column in result_columns:
-        equity = 1000
+        if column.startswith("col_v_"):
+            method = "value"
+        elif column.startswith("col_p_"):
+            method = "percentage"
+        elif column.startswith("col_r_"):
+            method = "risk_reward"
+
+        equity = 10000
         points = []
         for i in range(len(df[column])):
-            if i == 0:
-                points.append(equity + equity * 0.01 * df[column].iloc[i])
-            else:
-                points.append(points[i - 1] + points[i - 1] * 0.01 * df[column].iloc[i])
+            equity = calculate_equity(equity, df[column].iloc[i], method)
+            points.append(equity)
+
         datasets.append({"label": column[6:], "data": points})
 
     axis_label = "Trade Number" if metric_date == "default" else metric_date[6:]
 
-    labels = {"title": "$" + str(equity) + " Equity Simlutaion", "axes": axis_label}
+    labels = {"title": "$10.000 Equity Simlutaion", "axes": axis_label}
 
     x_labels = (
         list(range(1, 1 + len(df[result_columns[0]])))
@@ -79,7 +96,10 @@ def get_scatter(df, result_columns, metric_columns, current_metric: str) -> str:
     if metric_num == None:
         return "Bad"
 
-    labels = {"title": f"{metric_num[6:]} to Results", "axes": metric_num[6:]}
+    labels = {
+        "title": f"{parse_column_name(metric_num)} to Results",
+        "axes": metric_num[6:],
+    }
 
     for res in result_columns:
         dataset = {
@@ -87,7 +107,7 @@ def get_scatter(df, result_columns, metric_columns, current_metric: str) -> str:
             "data": [
                 {
                     "x": round(float(df.loc[i, metric_num]), 3),
-                    "y": round(float(df.loc[i, res]), 3),
+                    "y": round(float(normalize_results(df.loc[i, res], res)), 3),
                 }
                 for i in df.index
             ],
@@ -134,7 +154,8 @@ def get_bar(df, result_columns, metric_columns, current_metric: str):
             {
                 "label": res[6:],
                 "data": [
-                    round(df_category.loc[cat, res], 3) for cat in df_category.index
+                    round(normalize_results(df_category.loc[cat, res], res), 3)
+                    for cat in df_category.index
                 ],
             }
         )

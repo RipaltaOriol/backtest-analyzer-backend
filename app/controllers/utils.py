@@ -60,9 +60,17 @@ def from_db_to_df(state, orient="index"):
     orientation as an optional parameter which defaults to "index".
     """
     parsed_state = json.dumps(state["data"], default=json_serial)
+    # get columns that have to be parsed to datetime
+    date_columns = [
+        column_name
+        for column_name, dtype in state.get("fields").items()
+        if dtype.startswith("datetime64")
+    ]
     # I personally do not like having StringIO because I don't understand why is it necessary
     # although it doesn't work without it. Root problem from imgs being [] in json.
-    return pd.read_json(StringIO(parsed_state), orient=orient)
+    return pd.read_json(
+        StringIO(parsed_state), orient=orient, convert_dates=date_columns
+    )
 
 
 def from_df_to_db(df, add_index=False):

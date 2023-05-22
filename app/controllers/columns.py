@@ -5,4 +5,9 @@ This document outlines the possible type of columns that are possible in BA
 2. 
 TO BE COMPLETED
 
+
+# OTHER NOTES
+# date columns in DFs are managed in UTC
+# date columns in DB and Python are managed in ISO format
+
 """

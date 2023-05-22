@@ -1,4 +1,5 @@
 import json
+import re
 
 import numpy as np
 import pandas as pd
@@ -16,9 +17,11 @@ def upload_default(file):
         # transform Dataframe
         df = pd.read_csv(file, keep_default_na=False)
 
-        # if date column included it parses it
-        if ".d" in df.columns:
-            df[".d"] = pd.to_datetime(df[".d"])
+        # parse date columns
+        date_regex = re.compile("col_d_")
+        date_columns = list(filter(date_regex.match, df.columns))
+        for col in date_columns:
+            df[col] = pd.to_datetime(df[col], format="%d/%m/%y %H:%M:%S", utc=True)
 
         # TODO: include in documentation
         df = df.replace("", np.nan)
@@ -66,9 +69,11 @@ def upload_mt4(file):
     df.columns = new_cols
 
     # parse dates
-    df.loc[:, "Open Time"] = pd.to_datetime(df["Open Time"], format="%Y.%m.%d %H:%M:%S")
+    df.loc[:, "Open Time"] = pd.to_datetime(
+        df["Open Time"], format="%Y.%m.%d %H:%M:%S", utc=True
+    )
     df.loc[:, "Close Time"] = pd.to_datetime(
-        df["Open Time"], format="%Y.%m.%d %H:%M:%S"
+        df["Close Time"], format="%Y.%m.%d %H:%M:%S", utc=True
     )
 
     convert_dict = {
@@ -88,9 +93,6 @@ def upload_mt4(file):
         df.loc[:, col] = df[col].apply(lambda x: str(x).replace(" ", ""))
 
     df = df.astype(convert_dict)
-
-    for col in ["Open Time", "Close Time"]:
-        df.loc[:, col] = pd.to_datetime(df[col])
 
     rename_columns = {
         "Ticket": "#",

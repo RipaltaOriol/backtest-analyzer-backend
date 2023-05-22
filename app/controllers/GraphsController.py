@@ -35,6 +35,9 @@ def get_line(df, result_columns, current_metric: str) -> str:
     if metric_date == None:
         return "Bad"
 
+    if metric_date != "default":
+        df.sort_values(by=[metric_date], inplace=True)
+
     for column in result_columns:
         if column.startswith("col_v_"):
             method = "value"
@@ -54,11 +57,10 @@ def get_line(df, result_columns, current_metric: str) -> str:
     axis_label = "Trade Number" if metric_date == "default" else metric_date[6:]
 
     labels = {"title": "$10.000 Equity Simlutaion", "axes": axis_label}
-
     x_labels = (
         list(range(1, 1 + len(df[result_columns[0]])))
         if metric_date == "default"
-        else df[metric_date].tolist()
+        else df[metric_date].dt.strftime("%d-%m-%Y %H:%M:%S").tolist()
     )
 
     return jsonify(

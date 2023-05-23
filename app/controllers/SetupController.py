@@ -1,12 +1,13 @@
 import json
 import os
+import re
 from io import StringIO
 
 import numpy as np
 import pandas as pd
 from app import app
 from app.controllers.ErrorController import handle_403
-from app.controllers.GraphsController import get_bar, get_pie, get_scatter
+from app.controllers.GraphsController import get_bar, get_line, get_pie, get_scatter
 from app.controllers.setup_utils import reset_state_from_document
 from app.controllers.utils import from_db_to_df
 from app.models.Document import Document
@@ -27,11 +28,8 @@ class CustomJSONizer(json.JSONEncoder):
         )
 
 
-""" Retrieves All Setups
-"""
-
-
 def get_setups():
+    """Retrieves All Setups"""
     id = get_jwt_identity()
     user = User.objects(id=id["$oid"]).get()
     setups = Setup.objects(author=user)
@@ -191,10 +189,11 @@ def get_statistics(setup_id):
     user = User.objects(id=id["$oid"]).get()
     setup = Setup.objects(author=user, id=setup_id).get()
     data = from_db_to_df(setup.state)
-    result_columns = [col for col in data if col.startswith(".r_")]
+    result_columns = [col for col in data if re.match(r"col_[vpr]_", col)]
 
     count = {"stat": "Count"}
     total = {"stat": "Total"}
+    mean = {"stat": "Mean"}
     wins = {"stat": "Wins"}
     losses = {"stat": "Losses"}
     break_even = {"stat": "Break Even"}
@@ -204,7 +203,7 @@ def get_statistics(setup_id):
     expectancy = {"stat": "Expectancy"}
     max_consec_loss = {"stat": "Max. Consecutive Losses"}
     max_win = {"stat": "Maximum Win"}
-
+    drawdown = {"stat": "Drawdown"}
     for col in result_columns:
         count[col] = 0
         total[col] = 0
@@ -216,6 +215,10 @@ def get_statistics(setup_id):
         consecutive_losses = 0
         current_losses = 0
         for val in data[col]:
+            # TODO: add this when efficiently detecting misplaced values
+            # skip NaN values
+            # if pd.isna(val):
+            #     continue
             count[col] += 1
             total[col] += val
             if val > 0:
@@ -231,7 +234,12 @@ def get_statistics(setup_id):
                 break_even[col] += 1
                 consecutive_losses = max(consecutive_losses, current_losses)
                 current_losses = 0
+        data["cumulative"] = data[col].cumsum().round(2)
+        data["high_value"] = data["cumulative"].cummax()
+        data["drawdown"] = data["cumulative"] - data["high_value"]
+        drawdown[col] = data["drawdown"].min()
         total[col] = round(total[col], 3)
+        mean[col] = total[col] / count[col]
         win_rate[col] = wins[col] / count[col]
         avg_win[col] = total_wins / wins[col] if wins[col] else 0
         avg_loss[col] = total_losses / losses[col] if losses[col] else 0
@@ -244,6 +252,7 @@ def get_statistics(setup_id):
     statistics = [
         count,
         total,
+        mean,
         wins,
         losses,
         break_even,
@@ -253,50 +262,31 @@ def get_statistics(setup_id):
         expectancy,
         max_consec_loss,
         max_win,
+        drawdown,
     ]
-
     response = jsonify(statistics)
     return response
 
 
-""" Get Setup Chart
-    NOTE: needs some rethinking - probably move to different file
-    NOTE: think of a method for data sanitization to drop NaN values so it does not break 
-"""
-
-
 def get_graphics(setup_id):
+    """
+    Get Setup Chart
+    NOTE: needs some rethinking - probably move to different file
+    NOTE: think of a method for data sanitization to drop NaN values so it does not break
+    """
     id = get_jwt_identity()
     user = User.objects(id=id["$oid"]).get()
     setup = Setup.objects(author=user, id=setup_id).get()
     data = from_db_to_df(setup.state)
 
     # data.dropna(inplace = True)
-    result_names = [column for column in data.columns if column.startswith(".r_")]
-
-    # line chart
-    datasets = []
-    for column in result_names:
-        equity = 1000
-        points = []
-        for i in range(len(data[column])):
-            if i == 0:
-                points.append(equity + equity * 0.01 * data[column].iloc[i])
-            else:
-                points.append(
-                    points[i - 1] + points[i - 1] * 0.01 * data[column].iloc[i]
-                )
-        datasets.append({"name": column[3:], "values": points})
-
-    line = {
-        "name": "$" + str(equity) + " Equity Simlutaion",
-        "labels": list(range(1, 1 + len(data[result_names[0]]))),
-        "datasets": datasets,
-    }
+    result_names = [
+        column for column in data.columns if re.match(r"col_[vpr]_", column)
+    ]
 
     # NOTE: this can be done more effiently
     pie = {
-        "name": result_names[0][3:] + " by Outcome Distribution",
+        "name": result_names[0][6:] + " by Outcome Distribution",
         "labels": ["Winners", "Break-Even", "Lossers"],
         "values": [
             len(data[data[result_names[0]] > 0]),
@@ -305,15 +295,14 @@ def get_graphics(setup_id):
         ],
     }
 
-    response = jsonify(line=line, pie=pie)
+    response = jsonify(pie=pie)
     return response
 
 
-""" Gets Setups Graphs
-"""
-
-
 def get_graphs(setup_id):
+    """
+    Gets Setups Graphs
+    """
     id = get_jwt_identity()
     user = User.objects(id=id["$oid"]).get()
     setup = Setup.objects(author=user, id=setup_id).get()
@@ -321,28 +310,34 @@ def get_graphs(setup_id):
     # data.dropna(inplace = True)
     args = request.args
     type = args.get("type")
-
+    current_metric = args.get("currentMetric")
     if not type:
         # throw exeption
         return "Bad"
 
-    result_columns = [column for column in data.columns if column.startswith(".r_")]
-    metric_columns = [col for col in data if col.startswith(".m_")]
+    result_columns = [
+        column for column in data.columns if re.match(r"col_[vpr]_", column)
+    ]
+    metric_columns = [col for col in data if col.startswith("col_m_")]
+
+    if "col_rr" in data.columns:
+        metric_columns.append("col_rr")
 
     if type == "scatter":
-        return get_scatter(data, result_columns, metric_columns)
+        return get_scatter(data, result_columns, metric_columns, current_metric)
     if type == "bar":
-        return get_bar(data, result_columns, metric_columns)
+        return get_bar(data, result_columns, metric_columns, current_metric)
     if type == "pie":
         return get_pie(data, result_columns)
+    if type == "line":
+        return get_line(data, result_columns, current_metric)
     return "Bad"
 
 
-""" Gets Setup Filter Options
-"""
-
-
 def get_filter_options(doucment_id):
+    """
+    Gets Setup Filter Options
+    """
     document = Document.objects(id=doucment_id).get()
 
     data = from_db_to_df(document.state)
@@ -350,15 +345,15 @@ def get_filter_options(doucment_id):
     map_types = data.dtypes
     options = []
     for column in data.columns:
-        if column.startswith(".m_"):
-            option = {"id": column, "name": column[3:]}
+        if column.startswith("col_m_"):
+            option = {"id": column, "name": column[6:]}
             if map_types[column] == "float64" or map_types[column] == "int64":
                 option.update(type="number")
             else:
                 option.update(type="string")
                 option.update(values=list(data[column].dropna().unique()))
             options.append(option)
-        if column.startswith(".p"):
+        if column.startswith("col_p"):
             option = {
                 "id": column,
                 "name": "Pair",
@@ -366,15 +361,22 @@ def get_filter_options(doucment_id):
                 "values": list(data[column].dropna().unique()),
             }
             options.append(option)
+        if column.startswith("col_rr"):
+            option = {
+                "id": column,
+                "name": "Risk Reward",
+                "type": "number",
+                "values": list(data[column].dropna().unique()),
+            }
+            options.append(option)
 
     return options
 
 
-""" Updates the setups state from parent state
-"""
-
-
 def update_setups(document_id):
+    """
+    Updates the setups state from parent state
+    """
     setups = Setup.objects(documentId=document_id)
     for setup in setups:
         reset_state_from_document(setup.id)
@@ -383,6 +385,11 @@ def update_setups(document_id):
 def get_children(document_id):
     setups = Setup.objects(documentId=document_id).order_by("-date_created")
     return [
-        {"id": str(setup.id), "name": setup.name, "date": setup.date_created}
+        {
+            "id": str(setup.id),
+            "name": setup.name,
+            "date": setup.date_created,
+            "isDefault": setup.default,
+        }
         for setup in setups
     ]

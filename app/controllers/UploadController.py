@@ -1,7 +1,9 @@
 import json
+import re
 
 import numpy as np
 import pandas as pd
+from app.controllers.errors import UploadError
 from app.controllers.utils import from_df_to_db
 from flask import jsonify
 
@@ -15,12 +17,20 @@ def upload_default(file):
         # transform Dataframe
         df = pd.read_csv(file, keep_default_na=False)
 
-        # if date column included it parses it
-        if ".d" in df.columns:
-            df[".d"] = pd.to_datetime(df[".d"])
-        # include in how-to
-        # drop emtpy rows / columns
-        # df.dropna(axis = 1, inplace=True)
+        # parse date columns
+        date_regex = re.compile("col_d_")
+        date_columns = list(filter(date_regex.match, df.columns))
+        for col in date_columns:
+            df[col] = pd.to_datetime(df[col], format="%d/%m/%y %H:%M:%S", utc=True)
+
+        # TODO: include in documentation
+        df = df.replace("", np.nan)
+        df_nans = np.where(pd.isnull(df))
+        is_df_contains_nan = len(df_nans[0]) > 0
+        if is_df_contains_nan:
+            raise UploadError(
+                "File contains empty cells. Remove them or fix them before resubmit."
+            )
 
         # add all required columns
         df = _add_required_columns(df)
@@ -59,8 +69,12 @@ def upload_mt4(file):
     df.columns = new_cols
 
     # parse dates
-    df["Open Time"] = pd.to_datetime(df["Open Time"], format="%Y.%m.%d %H:%M:%S")
-    df["Close Time"] = pd.to_datetime(df["Open Time"], format="%Y.%m.%d %H:%M:%S")
+    df.loc[:, "Open Time"] = pd.to_datetime(
+        df["Open Time"], format="%Y.%m.%d %H:%M:%S", utc=True
+    )
+    df.loc[:, "Close Time"] = pd.to_datetime(
+        df["Close Time"], format="%Y.%m.%d %H:%M:%S", utc=True
+    )
 
     convert_dict = {
         "Size": "float",
@@ -76,31 +90,37 @@ def upload_mt4(file):
 
     # change column types
     for col in convert_dict:
-        df[col] = df[col].apply(lambda x: str(x).replace(" ", ""))
+        df.loc[:, col] = df[col].apply(lambda x: str(x).replace(" ", ""))
 
     df = df.astype(convert_dict)
 
-    for col in ["Open Time", "Close Time"]:
-        df[col] = pd.to_datetime(df[col])
-
     rename_columns = {
         "Ticket": "#",
-        "Open Time": ".d_Open Time",
-        "Type": ".m_Type",
-        "Size": ".m_Size",
-        "Item": ".p",
-        "Open": ".o",
-        "S / L": ".sl",
-        "T / P": ".tp",
-        "Close Time": ".d_Close Time",
-        "Close": ".c",
-        "Commission": ".m_Commision",
-        "Taxes": ".m_Taxes",
-        "Swap": ".m_Swap",
-        "Profit": ".r_Profit",
+        "Open Time": "col_d_Open Time",
+        "Type": "col_m_Type",
+        "Size": "col_m_Size",
+        "Item": "col_p",
+        "Open": "col_o",
+        "S / L": "col_sl",
+        "T / P": "col_tp",
+        "Close Time": "col_d_Close Time",
+        "Close": "col_c",
+        "Commission": "col_m_Commision",
+        "Taxes": "col_m_Taxes",
+        "Swap": "col_m_Swap",
+        "Profit": "col_v_Profit",
     }
 
     df.rename(columns=rename_columns, errors="raise", inplace=True)
+
+    # TODO: include in documentation
+    df = df.replace("", np.nan)
+    df_nans = np.where(pd.isnull(df))
+    is_df_contains_nan = len(df_nans[0]) > 0
+    if is_df_contains_nan:
+        raise UploadError(
+            "File contains empty cells. Remove them or fix them before resubmit."
+        )
 
     # add all required columns
     df = _add_required_columns(df)

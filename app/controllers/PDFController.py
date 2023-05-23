@@ -222,9 +222,9 @@ def get_file(setup_id):
     column_names = []
     for col in data.columns:
         col_name = col
-        if col.startswith(".r") or col.startswith(".m_"):
+        if col.startswith("col_r") or col.startswith("col_m_"):
             col_name = col[3:]
-        elif col == ".p":
+        elif col == "col_p":
             col_name = "Pair"
 
         column_names.append(Paragraph(str(col_name), style["table_header"]))

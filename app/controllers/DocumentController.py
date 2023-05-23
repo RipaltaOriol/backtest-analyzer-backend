@@ -1,11 +1,13 @@
 import json
 import os
+import re
 import shutil
 import uuid
 from io import StringIO
 
 import pandas as pd
 from app import app
+from app.controllers.errors import UploadError
 from app.controllers.SetupController import get_children, update_setups
 from app.controllers.UploadController import upload_default, upload_mt4
 from app.controllers.utils import (
@@ -91,7 +93,7 @@ def get_document_compare(file_id):
     setups = Setup.objects(author=user, documentId=file_id).order_by("-date_created")
     # implied that column names will not differ between setups and its document
     df = from_db_to_df(setups[0].state)
-    metric_list = [col for col in df if col.startswith(".r_")]
+    metric_list = [col for col in df if re.match(r"col_[vpr]_", col)]
     metric = metric_list[0] if metric is None else metric
 
     setups_compared = []
@@ -104,6 +106,35 @@ def get_document_compare(file_id):
         "data": setups_compared,
         "metrics": [[metric, parse_column_name(metric)] for metric in metric_list],
         "active": parse_column_name(metric),
+    }
+
+    response = jsonify(response)
+    return response
+
+
+def get_calendar_table(document_id):
+    """
+    Returns a calendar view for a given document. As well as options and selected metric for result and date display.
+    """
+    metric = request.args.get("metric", None)
+    date = request.args.get("date", None)
+    document = Document.objects(id=document_id).get()
+    df = from_db_to_df(document.state, orient="index")
+    # TODO: combine both loops into a single
+    metric_list = [col for col in df if re.match(r"col_[vpr]_", col)]
+    # TODO: is it col_r or col_r_
+    date_list = [col for col in df if col.startswith("col_d")]
+    metric = metric_list[0] if metric is None else metric
+    date = date_list[0] if date is None else date
+    # Reset index to get the index column passed in to the JSON
+    table = df.reset_index().to_json(orient="records")
+    table = json.loads(table)
+    response = {
+        "table": table,
+        "metrics": [[metric, parse_column_name(metric)] for metric in metric_list],
+        "active_metric": metric,
+        "active_date": date,
+        "dates": [[date, parse_column_name(date)] for date in date_list],
     }
 
     response = jsonify(response)
@@ -135,13 +166,17 @@ def post_document():
     is_file_exists = Document.objects(name=file.filename, author=user)
     if len(is_file_exists) > 0:
         return jsonify({"msg": "This file already exists", "success": False})
-
-    if file_source == "default":
-        df = upload_default(file)
-    elif file_source == "mt4":
-        df = upload_mt4(file)
-    else:
-        return jsonify({"msg": "File source could not be identified", "success": False})
+    try:
+        if file_source == "default":
+            df = upload_default(file)
+        elif file_source == "mt4":
+            df = upload_mt4(file)
+        else:
+            return jsonify(
+                {"msg": "File source could not be identified", "success": False}
+            )
+    except UploadError as err:
+        return jsonify({"msg": err.message, "success": False})
 
     # save the file to the DB
     document = Document(
@@ -204,36 +239,35 @@ def update_document(file_id):
         # create index for new row
         index = uuid.uuid4().hex
         # remove unnecessary keys from row
-        new_row = {i: data[i] for i in data if i not in {".d", "index", "tableData"}}
+        data.pop("rowId", None)
         Document.objects(id=file_id).update(
-            __raw__={"$set": {f"state.data.{index}": new_row}}
+            __raw__={"$set": {f"state.data.{index}": data}}
         )
 
     elif method == "update":
-
-        index = data.get("index")
+        index = data.get("rowId")
         # remove unnecessary keys from row
-        updated_row = {
-            i: data[i] for i in data if i not in {".d", "index", "tableData"}
-        }
+        data.pop("rowId", None)
         Document.objects(id=file_id).update(
-            __raw__={"$set": {f"state.data.{index}": updated_row}}
+            __raw__={"$set": {f"state.data.{index}": data}}
         )
 
     elif method == "delete":
-        index = data.get("index")
+        index = data.get("rowId")
         try:
             Document.objects(id=file_id).update_one(
                 __raw__={"$unset": {f"state.data.{index}": 1}}
             )
         except Exception as err:
-            return jsonify({"msg": err, "success": False})
+            return jsonify(
+                {"msg": err, "success": False}
+            )  # not sure this is good practice
     else:
         return jsonify({"msg": "Something went wrong. Try again!", "success": False})
 
     try:
         update_setups(file.id)
-    except:
+    except Exception as err:
         return jsonify({"msg": "Something went wrong. Try again!", "success": False})
 
     return jsonify({"msg": "Document updated correctly!", "success": True})

@@ -17,7 +17,7 @@ class Config(object):
 
 class ProductionConfig(Config):
     # Connect to the database
-    DEBUG = True
+    DEBUG = False
     MONGO_URI = "mongodb+srv://appadmin0:backtestanalyzer@clusterbeta.xm49b.mongodb.net/backtest-analyzer?retryWrites=true&w=majority&ssl=true&ssl_cert_reqs=CERT_NONE"
     # JWT config
     JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=24)

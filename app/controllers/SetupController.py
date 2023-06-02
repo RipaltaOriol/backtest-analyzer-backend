@@ -152,11 +152,11 @@ def put_setup_row(setup_id, row_id):
     """
     note = request.json.get("note", None)
     images = request.json.get("images", [])
-    lol = request.json.get("lol", None)
     # if sync is True then update the row on all Setups & Document
     is_sync = request.json.get("isSync", None)
     setup = Setup.objects(id=setup_id).get()
-
+    if row_id == "undefined":
+        return jsonify({"msg": "Something went wrong...", "success": False})
     try:
         setup.update(__raw__={"$set": {f"state.data.{row_id}.note": note}})
         setup.update(__raw__={"$set": {f"state.data.{row_id}.imgs": images}})

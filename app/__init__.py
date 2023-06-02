@@ -13,11 +13,7 @@ from mongoengine import connect, document
 load_dotenv()
 
 # Logger config
-logging.basicConfig(
-    format="%(asctime)s %(name)s [%(levelname)s] %(message)s",
-    datefmt="%H:%M:%S",
-    level=logging.INFO,
-)
+logging.basicConfig(level=logging.DEBUG)
 # logging.getLogger('flask_cors').level = logging.DEBUG
 
 app = Flask(__name__)

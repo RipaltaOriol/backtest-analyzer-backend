@@ -33,10 +33,10 @@ class PDF(FPDF):
 
     def header(self):
         """Generates page header"""
-        # self.image("../docs/fpdf2-logo.png", 10, 8, 33) # render once I have a logo
+        self.image("./imgs/logo.png", 10, 8, 8)
         self.set_font("arial", size=10)
         self.cell(80)
-        self.cell(30, 10, "Report generated with Backtest Analyser", align="C")
+        self.cell(30, 10, "Report generated with Trade Sharpener", align="C")
         self.ln(20)
 
     def footer(self):

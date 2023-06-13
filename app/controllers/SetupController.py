@@ -76,11 +76,10 @@ def get_setup(document_id, setup_id):
     return Response(response, mimetype="application/json")
 
 
-""" Creates A New Setup
-"""
-
-
 def post_setup():
+    """
+    Creates A New Setup
+    """
     id = get_jwt_identity()
     document = request.json.get("document", None)
     name = request.json.get("name", None)
@@ -101,11 +100,10 @@ def post_setup():
     return Response(setup.to_json(), mimetype="application/json")
 
 
-""" Renames A Setup
-"""
-
-
 def put_setup(setup_id):
+    """
+    Renames A Setup
+    """
     id = get_jwt_identity()
     name = request.json.get("name", None)
     default = request.json.get("default", None)

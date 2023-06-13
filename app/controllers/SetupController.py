@@ -76,11 +76,10 @@ def get_setup(document_id, setup_id):
     return Response(response, mimetype="application/json")
 
 
-""" Creates A New Setup
-"""
-
-
 def post_setup():
+    """
+    Creates A New Setup
+    """
     id = get_jwt_identity()
     document = request.json.get("document", None)
     name = request.json.get("name", None)
@@ -101,11 +100,10 @@ def post_setup():
     return Response(setup.to_json(), mimetype="application/json")
 
 
-""" Renames A Setup
-"""
-
-
 def put_setup(setup_id):
+    """
+    Renames A Setup
+    """
     id = get_jwt_identity()
     name = request.json.get("name", None)
     default = request.json.get("default", None)
@@ -152,11 +150,11 @@ def put_setup_row(setup_id, row_id):
     """
     note = request.json.get("note", None)
     images = request.json.get("images", [])
-    lol = request.json.get("lol", None)
     # if sync is True then update the row on all Setups & Document
     is_sync = request.json.get("isSync", None)
     setup = Setup.objects(id=setup_id).get()
-
+    if row_id == "undefined":
+        return jsonify({"msg": "Something went wrong...", "success": False})
     try:
         setup.update(__raw__={"$set": {f"state.data.{row_id}.note": note}})
         setup.update(__raw__={"$set": {f"state.data.{row_id}.imgs": images}})

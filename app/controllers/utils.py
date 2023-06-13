@@ -85,3 +85,12 @@ def from_df_to_db(df, add_index=False):
     data = json.loads(data)
 
     return {"fields": df.dtypes.apply(lambda x: x.name).to_dict(), "data": data}
+
+
+def truncate(float, decimals):
+    """Truncates/pads a float to decimal places without rounding"""
+    s = "{}".format(float)
+    if "e" in s or "E" in s:
+        return "{0:.{1}f}".format(float, decimals)
+    i, p, d = s.partition(".")
+    return ".".join([i, (d + "0" * decimals)[:decimals]])

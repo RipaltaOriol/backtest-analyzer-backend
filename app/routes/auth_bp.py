@@ -1,8 +1,7 @@
+from app.controllers.UserController import authorized, login, logout, refresh, signup
 from flask import Blueprint
 from flask_cors import CORS, cross_origin
 from flask_jwt_extended import jwt_required
-
-from app.controllers.UserController import authorized, login, logout, refresh, signup
 
 # Initialize blueprint
 auth_bp = Blueprint("auth_bp", __name__)

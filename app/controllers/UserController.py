@@ -1,5 +1,7 @@
 import json
 
+from app.controllers.ErrorController import handle_401, handle_403
+from app.models.User import User
 from bson import json_util
 from flask import jsonify, request
 from flask_jwt_extended import (
@@ -11,9 +13,6 @@ from flask_jwt_extended import (
 )
 from mongoengine.errors import NotUniqueError
 from werkzeug.security import check_password_hash, generate_password_hash
-
-from app.controllers.ErrorController import handle_401, handle_403
-from app.models.User import User
 
 """ Login User
 """

@@ -54,8 +54,8 @@ class Setup(DynamicDocument):
             "filters": [str(filter.name) for filter in self.filters],
             "stats": {
                 "data": [
-                    ["Average", round(df[metric].mean(), 2)],
-                    ["Total", round(df[metric].sum(), 2)],
+                    ["Average", float(round(df[metric].mean(), 2))],
+                    ["Total", float(round(df[metric].sum(), 2))],
                 ]
             },
             "breakdown": {

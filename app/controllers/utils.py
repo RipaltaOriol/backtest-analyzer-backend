@@ -40,6 +40,9 @@ def parse_column_name(column_name):
 
 
 def normalize_results(val, result):
+    """
+    Normalizes with % results
+    """
     if result.startswith("col_p_"):
         return val * 100
     return val

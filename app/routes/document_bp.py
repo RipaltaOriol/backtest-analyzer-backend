@@ -1,5 +1,6 @@
 from app.controllers.DocumentController import (
     clone_document,
+    create_document,
     delete_document,
     get_calendar_table,
     get_document,
@@ -17,6 +18,7 @@ from flask_jwt_extended import jwt_required
 document_bp = Blueprint("document_bp", __name__)
 
 document_bp.route("", methods=["GET"])(jwt_required()(get_documents))
+document_bp.route("", methods=["POST"])(jwt_required()(create_document))
 
 document_bp.route("/upload", methods=["POST"])(jwt_required()(post_document))
 document_bp.route("/<file_id>", methods=["GET"])(jwt_required()(get_document))

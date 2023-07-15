@@ -235,7 +235,7 @@ def get_statistics(setup_id):
         data["cumulative"] = data[col].cumsum().round(2)
         data["high_value"] = data["cumulative"].cummax()
         data["drawdown"] = data["cumulative"] - data["high_value"]
-        drawdown[col] = data["drawdown"].min()
+        drawdown[col] = float(data["drawdown"].min())
         total[col] = round(total[col], 3)
         mean[col] = total[col] / count[col]
         win_rate[col] = wins[col] / count[col]
@@ -245,7 +245,7 @@ def get_statistics(setup_id):
             (1 - win_rate[col]) * abs(avg_loss[col])
         )
         max_consec_loss[col] = max(consecutive_losses, current_losses)
-        max_win[col] = data[col].max()
+        max_win[col] = float(data[col].max())
 
     statistics = [
         count,
@@ -282,6 +282,9 @@ def get_graphics(setup_id):
         column for column in data.columns if re.match(r"col_[vpr]_", column)
     ]
 
+    if not result_names:
+        return jsonify(success=False, msg="No available data yet")
+
     # NOTE: this can be done more effiently
     pie = {
         "name": result_names[0][6:] + " by Outcome Distribution",
@@ -293,7 +296,7 @@ def get_graphics(setup_id):
         ],
     }
 
-    response = jsonify(pie=pie)
+    response = jsonify(pie=pie, success=True)
     return response
 
 
@@ -320,6 +323,9 @@ def get_graphs(setup_id):
 
     if "col_rr" in data.columns:
         metric_columns.append("col_rr")
+
+    # remove rows with not results recorded
+    data.dropna(subset=result_columns, inplace=True)
 
     if type == "scatter":
         return get_scatter(data, result_columns, metric_columns, current_metric)

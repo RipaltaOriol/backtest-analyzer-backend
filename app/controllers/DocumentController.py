@@ -60,6 +60,55 @@ def get_document(file_id):
     return response
 
 
+def create_document():
+    """
+    Creates a new Document
+    """
+    id = get_jwt_identity()
+    user = User.objects(id=id["$oid"]).get()
+
+    name = request.json.get("name", None)
+    columns = request.json.get("fields", None)
+    other = request.json.get("checkbox", None)
+
+    # # check if file exists
+    is_file_exists = Document.objects(name=name, author=user)
+    if len(is_file_exists) > 0:
+        return jsonify({"msg": "This file already exists", "success": False})
+
+    df_columns = {}
+
+    for column in columns:
+        print(column)
+        dtype = pd.Series(dtype="object")
+        if column["value"].startswith("col_m_"):
+            dtype = pd.Series(dtype=column["dtype"])
+        elif column["value"].startswith("col_d_"):
+            dtype = pd.Series(dtype="datetime64[ns, utc]")
+        else:
+            dtype = pd.Series(dtype="float")
+        df_columns[f"{column['value']}{column['name']}"] = dtype
+    print(df_columns)
+    for column, is_add in other.items():
+        if is_add:
+            df_columns[column] = pd.Series(dtype="object")
+
+    df = pd.DataFrame(df_columns)
+
+    # df = _add_required_columns(df) # see what happens if this is added
+    df = from_df_to_db(df, add_index=True)
+
+    # save the file to the DB
+    document = Document(name=name, author=user, state=df, source="Manual")
+    document.save()
+    # save the default setup to the DB
+    setup = Setup(
+        name="Default", author=user, documentId=document, default=True, state=df
+    )
+    setup.save()
+    return jsonify({"msg": "Document successfully uploaded", "success": True})
+
+
 def get_document_columns(file_id):
     """
     Retrieves a Document columns
@@ -68,9 +117,10 @@ def get_document_columns(file_id):
     user = User.objects(id=id["$oid"]).get()
     file = Document.objects(id=file_id, author=user).get()
     df = from_db_to_df(file.state)
-
-    data_columns = df.dtypes
     columns = []
+    data_columns = file.state["fields"] if df.empty else df.dtypes
+
+    # check if DataFrame is emtpy. If it is then get data from elsewhere (create utils function).
     for name, col_type in data_columns.items():
         columns.append(
             {
@@ -94,6 +144,13 @@ def get_document_compare(file_id):
     # implied that column names will not differ between setups and its document
     df = from_db_to_df(setups[0].state)
     metric_list = [col for col in df if re.match(r"col_[vpr]_", col)]
+    if not metric_list:
+        return jsonify(
+            {
+                "msg": "Insufficient data to compare",
+                "success": False,
+            }
+        )
     metric = metric_list[0] if metric is None else metric
 
     setups_compared = []
@@ -103,6 +160,7 @@ def get_document_compare(file_id):
         setups_compared.append(current)
 
     response = {
+        "success": True,
         "data": setups_compared,
         "metrics": [[metric, parse_column_name(metric)] for metric in metric_list],
         "active": parse_column_name(metric),

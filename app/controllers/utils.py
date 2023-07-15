@@ -40,6 +40,9 @@ def parse_column_name(column_name):
 
 
 def normalize_results(val, result):
+    """
+    Normalizes with % results
+    """
     if result.startswith("col_p_"):
         return val * 100
     return val
@@ -60,9 +63,17 @@ def from_db_to_df(state, orient="index"):
     orientation as an optional parameter which defaults to "index".
     """
     parsed_state = json.dumps(state["data"], default=json_serial)
+    # get columns that have to be parsed to datetime
+    date_columns = [
+        column_name
+        for column_name, dtype in state.get("fields").items()
+        if dtype.startswith("datetime64")
+    ]
     # I personally do not like having StringIO because I don't understand why is it necessary
     # although it doesn't work without it. Root problem from imgs being [] in json.
-    return pd.read_json(StringIO(parsed_state), orient=orient)
+    return pd.read_json(
+        StringIO(parsed_state), orient=orient, convert_dates=date_columns
+    )
 
 
 def from_df_to_db(df, add_index=False):
@@ -77,3 +88,12 @@ def from_df_to_db(df, add_index=False):
     data = json.loads(data)
 
     return {"fields": df.dtypes.apply(lambda x: x.name).to_dict(), "data": data}
+
+
+def truncate(float, decimals):
+    """Truncates/pads a float to decimal places without rounding"""
+    s = "{}".format(float)
+    if "e" in s or "E" in s:
+        return "{0:.{1}f}".format(float, decimals)
+    i, p, d = s.partition(".")
+    return ".".join([i, (d + "0" * decimals)[:decimals]])

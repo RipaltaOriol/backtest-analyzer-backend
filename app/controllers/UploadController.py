@@ -1,4 +1,5 @@
 import json
+import re
 
 import numpy as np
 import pandas as pd
@@ -16,13 +17,17 @@ def upload_default(file):
         # transform Dataframe
         df = pd.read_csv(file, keep_default_na=False)
 
-        # if date column included it parses it
-        if ".d" in df.columns:
-            df[".d"] = pd.to_datetime(df[".d"])
+        # parse date columns
+        date_regex = re.compile("col_d_")
+        date_columns = list(filter(date_regex.match, df.columns))
+        for col in date_columns:
+            df[col] = pd.to_datetime(df[col], format="%d/%m/%y %H:%M:%S", utc=True)
 
         # TODO: include in documentation
         df = df.replace("", np.nan)
-        df_nans = np.where(pd.isnull(df))
+        # images and note can have empty values & but if blank give it a default
+        df_empty_check = df.drop(["note", "imgs"], axis=1, errors="ignore")
+        df_nans = np.where(pd.isnull(df_empty_check))
         is_df_contains_nan = len(df_nans[0]) > 0
         if is_df_contains_nan:
             raise UploadError(
@@ -32,6 +37,9 @@ def upload_default(file):
         # add all required columns
         df = _add_required_columns(df)
 
+        # give default values to imgs and note columns if blank
+        df["imgs"] = df["imgs"].fillna("")
+        df["note"] = df["note"].fillna("")
         # parse images from CSV
         df["imgs"] = df["imgs"].apply(lambda x: x.split("^") if x else [])
 
@@ -44,14 +52,15 @@ def upload_default(file):
 def upload_mt4(file):
     data = pd.read_excel(file, index_col=False)
 
-    start = data.index[data["Raw Trading Ltd"] == "Ticket"].tolist()[0]
-    end = data.index[data["Raw Trading Ltd"] == "Open Trades:"].tolist()[0]
+    start = data.index[data.iloc[:, 0] == "Ticket"].tolist()[0]
+    end = data.index[data.iloc[:, 0] == "Open Trades:"].tolist()[0]
 
     df = data[start : end - 2]
     df.columns = df.iloc[0]
     df.columns.name = None
 
-    df.drop(index=df.index[0:2], axis=0, inplace=True)
+    df.drop(index=df.index[0:1], axis=0, inplace=True)
+    df = df[df["Type"] != "balance"]  # remove balance deposit
     df.index = np.arange(1, len(df) + 1)
 
     # rename prices columns to open & close
@@ -66,9 +75,11 @@ def upload_mt4(file):
     df.columns = new_cols
 
     # parse dates
-    df.loc[:, "Open Time"] = pd.to_datetime(df["Open Time"], format="%Y.%m.%d %H:%M:%S")
+    df.loc[:, "Open Time"] = pd.to_datetime(
+        df["Open Time"], format="%Y.%m.%d %H:%M:%S", utc=True
+    )
     df.loc[:, "Close Time"] = pd.to_datetime(
-        df["Open Time"], format="%Y.%m.%d %H:%M:%S"
+        df["Close Time"], format="%Y.%m.%d %H:%M:%S", utc=True
     )
 
     convert_dict = {
@@ -88,9 +99,6 @@ def upload_mt4(file):
         df.loc[:, col] = df[col].apply(lambda x: str(x).replace(" ", ""))
 
     df = df.astype(convert_dict)
-
-    for col in ["Open Time", "Close Time"]:
-        df.loc[:, col] = pd.to_datetime(df[col])
 
     rename_columns = {
         "Ticket": "#",

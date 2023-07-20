@@ -1,6 +1,8 @@
 from datetime import datetime
 
 from app.models.User import User
+from app.models.Template import Template
+
 from mongoengine.document import DynamicDocument
 from mongoengine.fields import DateTimeField, DictField, ReferenceField, StringField
 
@@ -8,6 +10,7 @@ from mongoengine.fields import DateTimeField, DictField, ReferenceField, StringF
 class Document(DynamicDocument):
     name = StringField()
     author = ReferenceField(User)
+    template = ReferenceField(Template)
     state = DictField()
     source = StringField()
     date_created = DateTimeField(default=datetime.utcnow)
@@ -18,6 +21,9 @@ class Document(DynamicDocument):
             "name": self.name,
             "source": self.source,
             "date": self.date_created,
+            "template": {"name": self.template.name, "id": str(self.template.id)}
+            if self.template
+            else None,
         }
 
         return document

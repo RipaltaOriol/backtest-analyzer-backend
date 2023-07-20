@@ -11,6 +11,9 @@ from app.controllers.DocumentController import (
     put_document,
     update_document,
 )
+
+from app.controllers.TemplateController import assing_template_to_document
+
 from flask import Blueprint
 from flask_jwt_extended import jwt_required
 
@@ -36,4 +39,8 @@ document_bp.route("/<file_id>/update", methods=["PUT"])(jwt_required()(update_do
 
 document_bp.route("/<document_id>/calendar", methods=["GET"])(
     jwt_required()(get_calendar_table)
+)
+
+document_bp.route("/<document_id>/templates/<template_id>", methods=["POST"])(
+    jwt_required()(assing_template_to_document)
 )

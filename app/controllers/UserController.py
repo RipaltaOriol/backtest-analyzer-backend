@@ -21,7 +21,12 @@ def get_user_details():
     id = get_jwt_identity()
     user = User.objects(id=id["$oid"]).get()
 
-    user_settings = UserSettings.objects(user=user).get()
+    user_settings = UserSettings.objects(user=user)
+
+    if not user_settings:
+        user_settings = UserSettings(user=user).save()
+    else:
+        user_settings = user_settings.get()
 
     user_templates = user_settings.get_templates()
 
@@ -90,11 +95,17 @@ def signup():
     # Receiving data
     email = request.json.get("email", None)
     password = request.json.get("password", None)
+    default_template = Template.objects(name="Default").get()
     if email and password:
         hashed_password = generate_password_hash(password)
         user = User(email=email, password=hashed_password)
+
+        # return "Hello"
         try:
             user = user.save()
+            # setup user settings
+            UserSettings(user=user, templates=[default_template]).save()
+
             user_id = json.loads(json_util.dumps(user.id))
             access_token = create_access_token(identity=user_id)
             refresh_token = create_refresh_token(identity=user_id)
@@ -108,7 +119,8 @@ def signup():
             )
             set_refresh_cookies(response, refresh_token)
             return response
-        except NotUniqueError:
+        except NotUniqueError as error:
+            print(error)
             return handle_403(msg="Something went wrong")
     else:
         return handle_401(msg="Missing email or password")

@@ -3,8 +3,7 @@ from enum import Enum
 from app.models.Document import Document
 from app.models.Setup import Setup
 from app.models.User import User
-from app.models.Template import Template
-from mongoengine.document import Document, EmbeddedDocument
+from mongoengine.document import DynamicDocument, EmbeddedDocument
 from mongoengine.fields import (
     BooleanField,
     DateTimeField,
@@ -67,19 +66,22 @@ class TakeProfit(EmbeddedDocument):
 
 class Event(EmbeddedDocument):
     event_date = DateTimeField(required=True)
-    event_risk = StringField(required=True)
+    monday = StringField(required=True)
+    tuesday = StringField(required=True)
+    wednesday = StringField(required=True)
+    thursday = StringField(required=True)
+    friday = StringField(required=True)
 
 
 # TODO: Investigate if you can modify a document
-class PPTTemplate(Document):
+class PPTTemplate(DynamicDocument):
     author = ReferenceField(User, reverse_delete_rule="CASCADE", required=True)
-    document = ReferenceField(Document, reverse_delete_rule="CASCADE", required=True)
+    document = ReferenceField(Document, required=True)
     setup = ReferenceField(Setup, reverse_delete_rule="CASCADE", required=True)
     row_id = StringField(required=True)
-    template = ReferenceField(Template, reverse_delete_rule="CASCADE", required=True)
 
-    asset = StringField(required=True)
-    direction = EnumField(Direction, required=True)
+    asset = StringField()
+    direction = EnumField(Direction)
 
     base_ppt = EnumField(CurrencyReading)
     quote_ppt = EnumField(CurrencyReading)
@@ -97,6 +99,9 @@ class PPTTemplate(Document):
     setup_comment = StringField()
 
     # MISSING some fields in here
+    technical_levels = StringField()
+    market_stucture = StringField()
+
     technical_analysis_comment = StringField()
     pre_trade_screenshot = StringField()
     tradingview_link = StringField()
@@ -104,7 +109,7 @@ class PPTTemplate(Document):
     fundamental_risk = StringField()
     event_risk = StringField()
     event_risk_date = ListField(
-        ListField(EmbeddedDocumentField(Event))
+        EmbeddedDocumentField(Event)
     )  # list of list used to track weekly events
     event_opportunity = StringField()
     event_opportunity_date = ListField(
@@ -114,11 +119,15 @@ class PPTTemplate(Document):
     date_executed = DateTimeField()
     status = BooleanField()
     entry_alert = BooleanField()
+    read_notes = BooleanField()
     is_stop_loss = BooleanField()
     is_take_profit = BooleanField()
     is_trade_placed = BooleanField()
 
     # MISSING some fields in here
+    liquidity_levels = StringField()
+    target_area = StringField()
+    price_action = StringField()
     close_target_comment = StringField()
     close_reason = StringField()
     result = EnumField(Result)

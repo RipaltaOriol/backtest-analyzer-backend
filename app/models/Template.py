@@ -7,7 +7,7 @@ from mongoengine.fields import StringField, FloatField
 
 
 class Template(DynamicDocument):
-    name = StringField()
+    name = StringField(unique=True)
     description = StringField()
     price = FloatField()
 

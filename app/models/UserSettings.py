@@ -6,9 +6,6 @@ from bson.json_util import default, dumps
 from mongoengine.document import DynamicDocument
 
 from mongoengine.fields import (
-    DateField,
-    EmailField,
-    StringField,
     ListField,
     ReferenceField,
 )
@@ -16,7 +13,7 @@ from mongoengine.fields import (
 
 class UserSettings(DynamicDocument):
     user = ReferenceField(User)
-    templates = ListField(ReferenceField(Template), unique=True)
+    templates = ListField(ReferenceField(Template))
 
     def get_templates(self):
         templates = []

@@ -8,6 +8,7 @@ from app.controllers.SetupController import (
     get_statistics,
     post_setup,
     put_setup,
+    get_setup_row,
     put_setup_row,
 )
 from flask import Blueprint
@@ -28,6 +29,5 @@ setup_bp.route("/<setup_id>/charts", methods=["GET"])(jwt_required()(get_graphic
 setup_bp.route("/<setup_id>/graphs", methods=["GET"])(jwt_required()(get_graphs))
 
 # API calls for setup rows
-setup_bp.route("/<setup_id>/<row_id>/note", methods=["POST"])(
-    jwt_required()(put_setup_row)
-)
+setup_bp.route("/<setup_id>/<row_id>", methods=["GET"])(jwt_required()(get_setup_row))
+setup_bp.route("/<setup_id>/<row_id>", methods=["POST"])(jwt_required()(put_setup_row))

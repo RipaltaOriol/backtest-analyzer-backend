@@ -19,6 +19,7 @@ from app.controllers.utils import (
 from app.models.Document import Document
 from app.models.Setup import Setup
 from app.models.User import User
+from app.models.Template import Template
 from flask import jsonify, request
 from flask_jwt_extended import get_jwt_identity
 
@@ -88,7 +89,7 @@ def create_document():
         else:
             dtype = pd.Series(dtype="float")
         df_columns[f"{column['value']}{column['name']}"] = dtype
-    print(df_columns)
+
     for column, is_add in other.items():
         if is_add:
             df_columns[column] = pd.Series(dtype="object")
@@ -98,8 +99,13 @@ def create_document():
     # df = _add_required_columns(df) # see what happens if this is added
     df = from_df_to_db(df, add_index=True)
 
+    # get default tempalte
+    default_template = Template.objects(name="Default").get()
+
     # save the file to the DB
-    document = Document(name=name, author=user, state=df, source="Manual")
+    document = Document(
+        name=name, author=user, state=df, source="Manual", template=default_template
+    )
     document.save()
     # save the default setup to the DB
     setup = Setup(
@@ -237,8 +243,13 @@ def post_document():
         return jsonify({"msg": err.message, "success": False})
 
     # save the file to the DB
+    default_template = Template.objects(name="Default").get()
     document = Document(
-        name=file.filename, author=user, state=df, source=source_map[file_source]
+        name=file.filename,
+        author=user,
+        state=df,
+        source=source_map[file_source],
+        template=default_template,
     )
     document.save()
     # save the default setup to the DB

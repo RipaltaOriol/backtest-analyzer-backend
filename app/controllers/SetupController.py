@@ -10,11 +10,13 @@ from app.controllers.ErrorController import handle_403
 from app.controllers.GraphsController import get_bar, get_line, get_pie, get_scatter
 from app.controllers.setup_utils import reset_state_from_document
 from app.controllers.utils import from_db_to_df
+from app.models.PPTTemplate import PPTTemplate
 from app.models.Document import Document
 from app.models.Setup import Setup
 from app.models.User import User
 from flask import jsonify, request
 from flask.wrappers import Response
+from app.controllers.RowController import update_ppt_row, update_default_row
 from flask_jwt_extended import get_jwt_identity
 
 
@@ -39,6 +41,9 @@ def get_setups():
         current = setup.to_json()
         current = json.loads(current)
         options = get_filter_options(setup.documentId.id)
+        template = setup.documentId.template.name if setup.documentId.template else {}
+
+        current.update(template=template)
         current.update(options=options)
         response.append(current)
 
@@ -143,11 +148,36 @@ def delete_setup(setup_id):
     return jsonify({"msg": "Setup successfully deleted", "success": True})
 
 
+def get_setup_row(setup_id, row_id):
+
+    id = get_jwt_identity()
+    user = User.objects(id=id["$oid"]).get()
+    setup = Setup.objects(id=setup_id).get()
+
+    if not setup_id or not row_id:
+        return {jsonify({"msg": "Something went wrong.", "success": False})}
+    print(setup.state["data"][row_id]["col_p"])
+    # return {"asset": setup.state["data"][row_id]["col_p"]}
+    setup_row = PPTTemplate.objects(setup=setup_id, row_id=row_id)
+    if setup_row:
+        setup_row = setup_row.get()
+
+    else:
+        setup_row = PPTTemplate(
+            author=user, document=setup.documentId, setup=setup, row_id=row_id
+        ).save()
+
+    response = json.loads(setup_row.to_json())
+    response.update(success=True)
+    return response
+
+
 def put_setup_row(setup_id, row_id):
     """
     Updates a specific row in a setup. An options parameter is_sync can be passed so this update
     is reflected across all setups and the parent document itself.
     """
+    row = request.json.get("row", None)
     note = request.json.get("note", None)
     images = request.json.get("images", [])
     # if sync is True then update the row on all Setups & Document
@@ -155,28 +185,12 @@ def put_setup_row(setup_id, row_id):
     setup = Setup.objects(id=setup_id).get()
     if row_id == "undefined":
         return jsonify({"msg": "Something went wrong...", "success": False})
-    try:
-        setup.update(__raw__={"$set": {f"state.data.{row_id}.note": note}})
-        setup.update(__raw__={"$set": {f"state.data.{row_id}.imgs": images}})
-        if is_sync:
-            # update the parent document
-            Document.objects(id=setup.documentId.id).update_one(
-                __raw__={"$set": {f"state.data.{row_id}.note": note}}
-            )
-            Document.objects(id=setup.documentId.id).update_one(
-                __raw__={"$set": {f"state.data.{row_id}.imgs": images}}
-            )
-            # update all the setups
-            Setup.objects(documentId=setup.documentId).update(
-                __raw__={"$set": {f"state.data.{row_id}.note": note}}
-            )
-            Setup.objects(documentId=setup.documentId).update(
-                __raw__={"$set": {f"state.data.{row_id}.imgs": images}}
-            )
-
-    except Exception as err:
-        return jsonify({"msg": err, "success": False})
-    return jsonify({"msg": "Setup row updated correctly!", "success": True})
+    setup = Setup.objects(id=setup_id).get()
+    template_type = setup.documentId.template.name
+    if template_type == "PPT":
+        return update_ppt_row(setup, row_id, row)
+    else:
+        return update_default_row(setup, row_id, note, images, is_sync)
 
 
 def get_statistics(setup_id):

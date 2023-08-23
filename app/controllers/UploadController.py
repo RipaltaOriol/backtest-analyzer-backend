@@ -34,6 +34,13 @@ def upload_default(file):
                 "File contains empty cells. Remove them or fix them before resubmit."
             )
 
+        if "col_d" in df.columns:
+            for val in df["col_d"].values:
+                if val.lower() != "long" and val.lower() != "short":
+                    raise UploadError(
+                        "Some direction values are invalid. Fix them before resubmit."
+                    )
+
         # add all required columns
         df = _add_required_columns(df)
 

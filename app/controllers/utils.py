@@ -35,7 +35,10 @@ def parse_column_name(column_name):
         column_name = "Pair"
     elif column_name == "col_rr":
         column_name = "Risk Reward"
-
+    elif column_name == "col_t":
+        column_name = "Timeframe"
+    elif column_name == "col_d":
+        column_name = "Direction"
     return column_name
 
 

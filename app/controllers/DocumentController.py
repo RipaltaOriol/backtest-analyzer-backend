@@ -80,7 +80,6 @@ def create_document():
     df_columns = {}
 
     for column in columns:
-        print(column)
         dtype = pd.Series(dtype="object")
         if column["value"].startswith("col_m_"):
             dtype = pd.Series(dtype=column["dtype"])
@@ -98,7 +97,6 @@ def create_document():
 
     # df = _add_required_columns(df) # see what happens if this is added
     df = from_df_to_db(df, add_index=True)
-
     # get default tempalte
     default_template = Template.objects(name="Default").get()
 

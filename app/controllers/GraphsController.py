@@ -172,8 +172,10 @@ def get_bar(df, result_columns, metric_columns, current_metric: str):
 
     labels = {"title": f"{metric_str[6:]} by Result", "axes": metric_str[6:]}
 
+    # thsi column removal is due to conflicts between datetime columns and group
+    df = df.loc[:, ~df.columns.str.startswith("col_d_")]
     df_category = df.groupby(metric_str).sum()
-
+    # this can be extracted from unique() but since groupby is already defined it's probably better this way
     data_labels = [label for label in df_category.index]
 
     for res in result_columns:

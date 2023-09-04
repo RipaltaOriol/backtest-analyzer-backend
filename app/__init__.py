@@ -2,14 +2,15 @@ import logging
 import os
 from datetime import timedelta
 
-import sentry_sdk
+# import sentry_sdk
 from dotenv import load_dotenv
 from flask import Flask, jsonify
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager
 from mongoengine import *
 from mongoengine import connect, document
-from sentry_sdk.integrations.flask import FlaskIntegration
+
+# from sentry_sdk.integrations.flask import FlaskIntegration
 
 # Load environment variables
 load_dotenv()

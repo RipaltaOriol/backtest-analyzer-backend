@@ -13,6 +13,10 @@ class Document(DynamicDocument):
     template = ReferenceField(Template)
     state = DictField()
     source = StringField()
+    metaapi_id = StringField()
+    meta_account = StringField()
+    meta_password = StringField()
+    meta_server = StringField()
     date_created = DateTimeField(default=datetime.utcnow)
 
     def with_children(self):

@@ -1,7 +1,7 @@
 import json
 import os
 from io import StringIO
-
+from datetime import datetime
 import numpy as np
 import pandas as pd
 from app import app
@@ -42,6 +42,13 @@ def apply_filter(df, column, operation, value):
                 df = df[df[column].isin(value)]
             elif operation == "nin":
                 df = df[-df[column].isin(value)]
+
+    elif operation == "date":
+        date_from = datetime.strptime(value[0], "%m/%d/%Y").strftime("%Y-%m-%d")
+        date_to = datetime.strptime(value[1], "%m/%d/%Y").strftime("%Y-%m-%d")
+        df = df.loc[(df[column] >= date_from) & (df[column] <= date_to)]
+        print(df)
+
     else:
         # update the value so that it only gets the first element
         value = value[0]
@@ -82,9 +89,14 @@ def get_filter_name(column, operation, value):
         name += " includes "
     elif operation == "nin":
         name += " not includes "
-    # attach values
-    values = ", ".join(str(v) for v in value)
-    name += values
+
+    # special format for dates
+    if operation == "date":
+        name += f" from {value[0]} to {value[1]}"
+    else:
+        # attach values
+        values = ", ".join(str(v) for v in value)
+        name += values
     return name
 
 

@@ -387,6 +387,13 @@ def get_filter_options(doucment_id):
                 "values": list(data[column].dropna().unique()),
             }
             options.append(option)
+        if column.startswith("col_d_"):
+            option = {
+                "id": column,
+                "name": column[6:],
+                "type": "date",
+            }
+            options.append(option)
 
     return options
 

@@ -198,7 +198,7 @@ def get_calendar_table(document_id):
     metric = metric_list[0] if metric is None else metric
     date = date_list[0] if date is None else date
     # Reset index to get the index column passed in to the JSON
-    table = df.reset_index().to_json(orient="records")
+    table = df.reset_index().to_json(orient="records", date_format="iso")
     table = json.loads(table)
     response = {
         "table": table,

@@ -48,6 +48,8 @@ CORS(app, supports_credentials=True)
 # Configuration
 app.secret_key = "secret-backtest-analyzer"
 
+app.json.sort_keys = False
+
 app.config.from_object(os.getenv("APP_ENV"))
 app.config["JWT_TOKEN_LOCATION"] = ["headers", "cookies"]
 app.config["JWT_COOKIE_SECURE"] = True

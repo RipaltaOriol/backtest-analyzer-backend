@@ -126,6 +126,16 @@ def signup():
         return handle_401(msg="Missing email or password")
 
 
+def update_password():
+    """Update password"""
+    id = get_jwt_identity()
+    password = request.json.get("password", None)
+    hashed_password = generate_password_hash(password)
+
+    User.objects(id=id["$oid"]).update(password=hashed_password)
+    return {"success": True, "msg": "Password updated successfully."}
+
+
 def logout():
     """Logouut User"""
     response = jsonify({"msg": "Logout successful"})
@@ -137,7 +147,9 @@ def refresh():
     """Refresh Token"""
     id = get_jwt_identity()
     access_token = create_access_token(identity=id)
-    response = jsonify({"access_token": access_token, "success": True})
+    response = jsonify(
+        {"access_token": access_token, "user": id["$oid"], "success": True}
+    )
     return response
 
 

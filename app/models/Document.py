@@ -11,6 +11,7 @@ class Document(DynamicDocument):
     name = StringField()
     author = ReferenceField(User)
     template = ReferenceField(Template)
+    template_mapping = DictField()
     state = DictField()
     source = StringField()
     metaapi_id = StringField()

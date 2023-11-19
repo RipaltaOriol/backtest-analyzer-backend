@@ -33,6 +33,7 @@ from app.models.Setup import Setup
 from app.models.User import User
 from app.models.Template import Template
 from flask import jsonify, request
+from app.controllers.RowController import update_mappings_to_template
 from flask_jwt_extended import get_jwt_identity
 
 source_map = {"default": "Default", "mt4_file": "MT4 File", "mt4_api": "MT4 API"}
@@ -340,6 +341,10 @@ def update_document(file_id):
             )  # not sure this is good practice
     else:
         return jsonify({"msg": "Something went wrong. Try again!", "success": False})
+
+    template_type = file.template.name
+    if template_type == "PPT":
+        update_mappings_to_template(file, index, data, method)
 
     try:
         update_setups(file.id)

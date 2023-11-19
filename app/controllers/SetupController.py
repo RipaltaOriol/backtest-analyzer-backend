@@ -157,7 +157,7 @@ def get_setup_row(setup_id, row_id):
     if not setup_id or not row_id:
         return {jsonify({"msg": "Something went wrong.", "success": False})}
     # return {"asset": setup.state["data"][row_id]["col_p"]}
-    setup_row = PPTTemplate.objects(setup=setup_id, row_id=row_id)
+    setup_row = PPTTemplate.objects(document=setup.documentId, row_id=row_id)
     if setup_row:
         setup_row = setup_row.get()
 
@@ -179,17 +179,18 @@ def put_setup_row(setup_id, row_id):
     row = request.json.get("row", None)
     note = request.json.get("note", None)
     images = request.json.get("images", [])
+    # TODO: remove logic for sync
     # if sync is True then update the row on all Setups & Document
     is_sync = request.json.get("isSync", None)
-    setup = Setup.objects(id=setup_id).get()
+    # setup = Setup.objects(id=setup_id).get()
+    document = Document.objects(id=setup_id).get()
     if row_id == "undefined":
         return jsonify({"msg": "Something went wrong...", "success": False})
-    setup = Setup.objects(id=setup_id).get()
-    template_type = setup.documentId.template.name
+    template_type = document.template.name
     if template_type == "PPT":
-        return update_ppt_row(setup, row_id, row)
+        return update_ppt_row(document, row_id, row)
     else:
-        return update_default_row(setup, row_id, note, images, is_sync)
+        return update_default_row(document, row_id, note, images, is_sync)
 
 
 def get_statistics(setup_id):

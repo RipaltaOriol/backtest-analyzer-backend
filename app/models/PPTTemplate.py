@@ -2,6 +2,7 @@ from enum import Enum
 
 from app.models.Document import Document
 from app.models.Setup import Setup
+from bson.json_util import dumps
 from app.models.User import User
 from mongoengine.document import DynamicDocument, EmbeddedDocument
 from mongoengine.fields import (
@@ -52,11 +53,11 @@ class ResultLearning(Enum):
 
 class EntryPosition(EmbeddedDocument):
     position_number = IntField(required=True)
-    order_type = EnumField(OrderType, required=True)
-    price = FloatField(required=True)
-    risk = FloatField(required=True)
-    size = FloatField(required=True)
-    risk_reward = FloatField(required=True)
+    order_type = EnumField(OrderType, required=False)
+    price = FloatField(required=False)
+    risk = FloatField(required=False)
+    size = FloatField(required=False)
+    risk_reward = FloatField(required=False)
 
 
 class TakeProfit(EmbeddedDocument):
@@ -77,7 +78,7 @@ class Event(EmbeddedDocument):
 class PPTTemplate(DynamicDocument):
     author = ReferenceField(User, reverse_delete_rule="CASCADE", required=True)
     document = ReferenceField(Document, required=True)
-    setup = ReferenceField(Setup, reverse_delete_rule="CASCADE", required=True)
+    setup = ReferenceField(Setup, reverse_delete_rule="CASCADE")  # , required=True)
     row_id = StringField(required=True)
 
     asset = StringField()
@@ -140,6 +141,14 @@ class PPTTemplate(DynamicDocument):
 
     post_trade_screenshot = StringField()
     post_trade_comment = StringField()
+
+    def to_json(self):
+        ppt_template = self.to_mongo()
+
+        if self.date_executed:
+            ppt_template["date_executed"] = self.date_executed.isoformat()
+
+        return dumps(ppt_template)
 
     meta = {
         "collection": "ppttemplate",

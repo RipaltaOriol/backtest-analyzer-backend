@@ -21,7 +21,7 @@ logging.basicConfig(
     datefmt="%H:%M:%S",
     level=logging.INFO,
 )
-# logging.getLogger('flask_cors').level = logging.DEBUG
+logging.getLogger("flask_cors").level = logging.DEBUG
 
 # if os.getenv("SENTRY_ENVIRONMENT") == "production":
 #     # sentry monitor

@@ -2,15 +2,12 @@ import logging
 import os
 from datetime import timedelta
 
-# import sentry_sdk
 from dotenv import load_dotenv
 from flask import Flask, jsonify
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager
 from mongoengine import *
 from mongoengine import connect, document
-
-# from sentry_sdk.integrations.flask import FlaskIntegration
 
 # Load environment variables
 load_dotenv()
@@ -23,33 +20,17 @@ logging.basicConfig(
 )
 logging.getLogger("flask_cors").level = logging.DEBUG
 
-# if os.getenv("SENTRY_ENVIRONMENT") == "production":
-#     # sentry monitor
-#     sentry_sdk.init(
-#         dsn="https://4846760153f545fd828547b8e389686f@o4505359772811264.ingest.sentry.io/4505359774515200",
-#         integrations=[
-#             FlaskIntegration(),
-#         ],
-#         # Set traces_sample_rate to 1.0 to capture 100%
-#         # of transactions for performance monitoring.
-#         # We recommend adjusting this value in production.
-#         traces_sample_rate=1.0,
-#         profiles_sample_rate=1.0,
-#         request_bodies="always",
-#         environment=os.getenv("SENTRY_ENVIRONMENT"),
-#     )
 
 app = Flask(__name__)
 
 # JWT, CORS config
 jwt = JWTManager(app)
 
-CORS(app, supports_credentials=True, origins="https://tradesharpener.com")
+CORS(app, supports_credentials=True)
 
 # Configuration
 app.secret_key = "secret-backtest-analyzer"
 
-app.json.sort_keys = False
 
 app.config.from_object(os.getenv("APP_ENV"))
 app.config["JWT_TOKEN_LOCATION"] = ["headers", "cookies"]

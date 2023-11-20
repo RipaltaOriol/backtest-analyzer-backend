@@ -2,14 +2,7 @@ import json
 from datetime import datetime
 
 from mongoengine.document import Document
-
-from mongoengine.fields import (
-    DateField,
-    EmailField,
-    StringField,
-    ListField,
-    ReferenceField,
-)
+from mongoengine.fields import DateField, EmailField, StringField
 
 
 class User(Document):

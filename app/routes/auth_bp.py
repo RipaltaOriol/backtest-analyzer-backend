@@ -13,7 +13,7 @@ from flask_jwt_extended import jwt_required
 # Initialize blueprint
 auth_bp = Blueprint("auth_bp", __name__)
 
-auth_bp.route("/login", methods=["POST, OPTIONS"])(login)
+auth_bp.route("/login", methods=["POST"])(login)
 auth_bp.route("/signup", methods=["POST"])(signup)
 auth_bp.route("/logout", methods=["POST"])(jwt_required()(logout))
 auth_bp.route("/update-password", methods=["PUT"])(jwt_required()(update_password))

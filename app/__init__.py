@@ -44,7 +44,7 @@ app = Flask(__name__)
 # JWT, CORS config
 jwt = JWTManager(app)
 
-CORS(app, origins="*")
+CORS(app, supports_credentials=True, origins="https://tradesharpener.com")
 
 # Configuration
 app.secret_key = "secret-backtest-analyzer"

@@ -8,15 +8,15 @@ import pandas as pd
 from app import app
 from app.controllers.ErrorController import handle_403
 from app.controllers.GraphsController import get_bar, get_line, get_pie, get_scatter
+from app.controllers.RowController import update_default_row, update_ppt_row
 from app.controllers.setup_utils import reset_state_from_document
 from app.controllers.utils import from_db_to_df, parse_column_name
-from app.models.PPTTemplate import PPTTemplate
 from app.models.Document import Document
+from app.models.PPTTemplate import PPTTemplate
 from app.models.Setup import Setup
 from app.models.User import User
 from flask import jsonify, request
 from flask.wrappers import Response
-from app.controllers.RowController import update_ppt_row, update_default_row
 from flask_jwt_extended import get_jwt_identity
 
 
@@ -425,7 +425,10 @@ def update_setups(document_id):
     Updates the setups state from parent state
     """
     setups = Setup.objects(documentId=document_id)
+    print(setups)
+
     for setup in setups:
+        print(setup.name)
         reset_state_from_document(setup.id)
 
 

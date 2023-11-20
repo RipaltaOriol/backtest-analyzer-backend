@@ -1,26 +1,22 @@
+import asyncio
 import json
+import logging
 import os
 import re
 import shutil
-import asyncio
-
 import uuid
-from io import StringIO
 from datetime import datetime, timedelta
-
-from metaapi_cloud_sdk import MetaApi
-from metaapi_cloud_sdk.clients.metaApi.metatraderAccount_client import (
-    NewMetatraderAccountDto,
-)
+from io import StringIO
 
 import pandas as pd
 from app import app
 from app.controllers.errors import UploadError
+from app.controllers.RowController import update_mappings_to_template
 from app.controllers.SetupController import get_children, update_setups
 from app.controllers.UploadController import (
+    upaload_meta_api,
     upload_default,
     upload_mt4,
-    upaload_meta_api,
 )
 from app.controllers.utils import (
     from_db_to_df,
@@ -30,11 +26,14 @@ from app.controllers.utils import (
 )
 from app.models.Document import Document
 from app.models.Setup import Setup
-from app.models.User import User
 from app.models.Template import Template
+from app.models.User import User
 from flask import jsonify, request
-from app.controllers.RowController import update_mappings_to_template
 from flask_jwt_extended import get_jwt_identity
+from metaapi_cloud_sdk import MetaApi
+from metaapi_cloud_sdk.clients.metaApi.metatraderAccount_client import (
+    NewMetatraderAccountDto,
+)
 
 source_map = {"default": "Default", "mt4_file": "MT4 File", "mt4_api": "MT4 API"}
 
@@ -342,7 +341,11 @@ def update_document(file_id):
     else:
         return jsonify({"msg": "Something went wrong. Try again!", "success": False})
 
-    template_type = file.template.name
+    template_type = None
+
+    if file.template:
+        template_type = file.template.name
+
     if template_type == "PPT":
         update_mappings_to_template(file, index, data, method)
 

@@ -34,6 +34,13 @@ def upload_default(file):
                 "File contains empty cells. Remove them or fix them before resubmit."
             )
 
+        if "col_d" in df.columns:
+            for val in df["col_d"].values:
+                if val.lower() != "long" and val.lower() != "short":
+                    raise UploadError(
+                        "Some direction values are invalid. Fix them before resubmit."
+                    )
+
         # add all required columns
         df = _add_required_columns(df)
 
@@ -139,3 +146,67 @@ def _add_required_columns(df):
             df[col] = ""
 
     return df
+
+
+def upaload_meta_api(data):
+    data = pd.DataFrame.from_dict(data, orient="columns")
+
+    # remove all non type DEAL_TYPE and DEAL_TYPE_SELL
+    data = data.loc[
+        (data["type"] == "DEAL_TYPE_BUY") | (data["type"] == "DEAL_TYPE_SELL")
+    ]
+
+    data_grouped = data.groupby("positionId")
+    data_grouped = data.sort_values("entryType", ascending=True).groupby("positionId")
+
+    data_time = data_grouped["time"].apply(lambda x: pd.Series(x.values)).unstack()
+    data_price = data_grouped["price"].apply(lambda x: pd.Series(x.values)).unstack()
+    data_time.rename(
+        columns={0: "col_d_Open Time", 1: "col_d_Close Time"}, inplace=True
+    )
+    data_price.rename(columns={0: "col_o", 1: "col_c"}, inplace=True)
+
+    data_clean = data.loc[data.entryType == "DEAL_ENTRY_OUT"]
+    data_clean.set_index("positionId", inplace=True)
+    df = pd.concat([data_clean, data_time, data_price], axis=1)
+    df["type"] = df["type"].apply(lambda x: "sell" if x == "DEAL_TYPE_BUY" else "buy")
+    df.drop(
+        [
+            "magic",
+            "time",
+            "entryType",
+            "price",
+            "accountCurrencyExchangeRate",
+            "orderId",
+            "platform",
+            "reason",
+            "comment",
+            "brokerComment",
+            "brokerTime",
+        ],
+        axis=1,
+        inplace=True,
+    )
+
+    # parse dates
+    df.loc[:, "col_d_Open Time"] = pd.to_datetime(df["col_d_Open Time"], utc=True)
+    df.loc[:, "col_d_Close Time"] = pd.to_datetime(df["col_d_Close Time"], utc=True)
+
+    rename_columns = {
+        "id": "#",
+        "type": "col_m_Type",
+        "volume": "col_m_Size",
+        "symbol": "col_p",
+        "stopLoss": "col_sl",
+        "takeProfit": "col_tp",
+        "commission": "col_m_Commision",
+        "swap": "col_m_Swap",
+        "profit": "col_v_Profit",
+    }
+
+    df.rename(columns=rename_columns, errors="raise", inplace=True)
+
+    # add all required columns
+    df = _add_required_columns(df)
+
+    return from_df_to_db(df, add_index=False)

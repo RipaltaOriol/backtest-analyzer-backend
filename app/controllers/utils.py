@@ -5,6 +5,9 @@ from io import StringIO
 
 import pandas as pd
 
+TEMPLATE_PPT_POSITIONS = ["size", "order_type", "risk_reward", "price", "risk"]
+TEMPLATE_PPT_TAKE_PROFIT = "take_profit"
+
 
 def json_serial(obj):
     """JSON serializer for objects not serializable by default json code"""
@@ -35,11 +38,17 @@ def parse_column_name(column_name):
         column_name = "Pair"
     elif column_name == "col_rr":
         column_name = "Risk Reward"
-
+    elif column_name == "col_t":
+        column_name = "Timeframe"
+    elif column_name == "col_d":
+        column_name = "Direction"
     return column_name
 
 
 def normalize_results(val, result):
+    """
+    Normalizes with % results
+    """
     if result.startswith("col_p_"):
         return val * 100
     return val
@@ -94,3 +103,39 @@ def truncate(float, decimals):
         return "{0:.{1}f}".format(float, decimals)
     i, p, d = s.partition(".")
     return ".".join([i, (d + "0" * decimals)[:decimals]])
+
+
+def parse_mappings(trade, template_k):
+    # case for positions
+    if template_k in TEMPLATE_PPT_POSITIONS:
+        return trade["positions"][0][template_k]
+
+    # case for take profit
+    elif template_k == TEMPLATE_PPT_TAKE_PROFIT:
+        return trade["take_profit"][0][template_k]
+
+    else:
+        return trade[template_k]
+
+
+def row_to_ppt_template(mappings, template, row):
+
+    for template_k, state_k in mappings.items():
+
+        if state_k:
+
+            value = row[state_k]
+
+            if template_k in TEMPLATE_PPT_POSITIONS:
+                template["positions"][0][
+                    template_k
+                ] = value  # I need to create a new object when its new
+
+            # case for take profit
+            elif template_k == TEMPLATE_PPT_TAKE_PROFIT:
+                template["take_profit"][0][template_k] = value
+
+            else:
+                template[template_k] = value
+
+    return template

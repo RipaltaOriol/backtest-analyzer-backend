@@ -3,7 +3,7 @@ import re
 from datetime import datetime
 from io import BytesIO
 from typing import List, Tuple
-
+import io
 import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
@@ -163,9 +163,10 @@ class PDF(FPDF):
             self.ln(8)
         images = row.get("imgs", [])
 
-        for image in images:
-            self.image(image, w=self.epw)
-            self.ln(5)
+        if images:  # images can be None occasionally
+            for image in images:
+                self.image(image, w=self.epw)
+                self.ln(5)
 
         if add_page:
             self.conditional_add_page()
@@ -272,9 +273,18 @@ def get_file(setup_id):
         is_add_page = False if i == len(trades) - 1 else True
         pdf.trade_breakdown(trade, result_names, metric_columns, add_page=is_add_page)
 
-    response = make_response(pdf.output())
-    response.headers["Content-Type"] = "application/pdf"
-    return response
+    stream = io.BytesIO(pdf.output(dest="S"))
+    return send_file(
+        stream,
+        mimetype="application/pdf",
+        download_name=f"{title}.pdf",
+        as_attachment=False,
+    )
+
+    # response = make_response(pdf.output(dest='S').encode('latin-1'))
+    # response.headers.set('Content-Disposition', 'attachment', filename=title + '.pdf')
+    # response.headers["Content-Type"] = "application/pdf"
+    # return response
 
 
 def generate_equity_curve(df: pd.DataFrame, result_names: List[str], pdf: FPDF) -> None:

@@ -57,6 +57,22 @@ def get_line(df, result_columns, current_metric: str) -> str:
     axis_label = "Trade Number" if metric_date == "default" else metric_date[6:]
 
     labels = {"title": "$10.000 Equity Simlutaion", "axes": axis_label}
+
+    if not datasets:
+        return jsonify(
+            {
+                "msg": "No available data yet",
+                "success": False,
+                "labels": labels,
+                "data": datasets,
+                "active_metric": metric_date,
+                "metric_list": [
+                    [metric, parse_column_name(metric)] for metric in metric_columns
+                ]
+                + [["default", "Trade Number"]],
+            }
+        )
+
     x_labels = (
         list(range(1, 1 + len(df[result_columns[0]])))
         if metric_date == "default"
@@ -66,6 +82,7 @@ def get_line(df, result_columns, current_metric: str) -> str:
     return jsonify(
         {
             "labels": labels,
+            "success": True,
             "xLabels": x_labels,
             "data": datasets,
             "active_metric": metric_date,
@@ -79,9 +96,13 @@ def get_line(df, result_columns, current_metric: str) -> str:
 
 def get_scatter(df, result_columns, metric_columns, current_metric: str) -> str:
     data = []
-
     if len(result_columns) == 0 or len(metric_columns) == 0:
-        return "Bad"
+        return jsonify(
+            {
+                "success": False,
+                "msg": "Not enough data to compute",
+            }
+        )
 
     metric_num = None
     metric_list = [
@@ -102,7 +123,6 @@ def get_scatter(df, result_columns, metric_columns, current_metric: str) -> str:
         "title": f"{parse_column_name(metric_num)} to Results",
         "axes": metric_num[6:],
     }
-
     for res in result_columns:
         dataset = {
             "label": res[6:],
@@ -115,9 +135,9 @@ def get_scatter(df, result_columns, metric_columns, current_metric: str) -> str:
             ],
         }
         data.append(dataset)
-
     return jsonify(
         {
+            "success": True,
             "data": data,
             "labels": labels,
             "active_metric": metric_num,
@@ -132,7 +152,12 @@ def get_bar(df, result_columns, metric_columns, current_metric: str):
     data = []
 
     if len(result_columns) == 0 or len(metric_columns) == 0:
-        return "Bad"
+        return jsonify(
+            {
+                "success": False,
+                "msg": "Not enough data to compute",
+            }
+        )
 
     metric_str = None
     metric_list = [col for col in metric_columns if df.dtypes[col] == "object"]
@@ -147,23 +172,26 @@ def get_bar(df, result_columns, metric_columns, current_metric: str):
 
     labels = {"title": f"{metric_str[6:]} by Result", "axes": metric_str[6:]}
 
+    # thsi column removal is due to conflicts between datetime columns and group
+    df = df.loc[:, ~df.columns.str.startswith("col_d_")]
     df_category = df.groupby(metric_str).sum()
-
+    # this can be extracted from unique() but since groupby is already defined it's probably better this way
     data_labels = [label for label in df_category.index]
 
     for res in result_columns:
+        # float parsing is necessary because JSON does not recognize Numpy data types
         data.append(
             {
                 "label": res[6:],
                 "data": [
-                    round(normalize_results(df_category.loc[cat, res], res), 3)
+                    round(normalize_results(float(df_category.loc[cat, res]), res), 3)
                     for cat in df_category.index
                 ],
             }
         )
-
     return jsonify(
         {
+            "success": True,
             "data": data,
             "dataLabels": data_labels,
             "labels": labels,

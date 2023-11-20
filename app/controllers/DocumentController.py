@@ -2,14 +2,26 @@ import json
 import os
 import re
 import shutil
+import asyncio
+
 import uuid
 from io import StringIO
+from datetime import datetime, timedelta
+
+from metaapi_cloud_sdk import MetaApi
+from metaapi_cloud_sdk.clients.metaApi.metatraderAccount_client import (
+    NewMetatraderAccountDto,
+)
 
 import pandas as pd
 from app import app
 from app.controllers.errors import UploadError
 from app.controllers.SetupController import get_children, update_setups
-from app.controllers.UploadController import upload_default, upload_mt4
+from app.controllers.UploadController import (
+    upload_default,
+    upload_mt4,
+    upaload_meta_api,
+)
 from app.controllers.utils import (
     from_db_to_df,
     from_df_to_db,
@@ -19,13 +31,12 @@ from app.controllers.utils import (
 from app.models.Document import Document
 from app.models.Setup import Setup
 from app.models.User import User
+from app.models.Template import Template
 from flask import jsonify, request
+from app.controllers.RowController import update_mappings_to_template
 from flask_jwt_extended import get_jwt_identity
 
-source_map = {
-    "default": "Default",
-    "mt4": "MT4",
-}
+source_map = {"default": "Default", "mt4_file": "MT4 File", "mt4_api": "MT4 API"}
 
 
 def get_documents():
@@ -60,6 +71,58 @@ def get_document(file_id):
     return response
 
 
+def create_document():
+    """
+    Creates a new Document
+    """
+    id = get_jwt_identity()
+    user = User.objects(id=id["$oid"]).get()
+
+    name = request.json.get("name", None)
+    columns = request.json.get("fields", None)
+    other = request.json.get("checkbox", None)
+
+    # # check if file exists
+    is_file_exists = Document.objects(name=name, author=user)
+    if len(is_file_exists) > 0:
+        return jsonify({"msg": "This file already exists", "success": False})
+
+    df_columns = {}
+
+    for column in columns:
+        dtype = pd.Series(dtype="object")
+        if column["value"].startswith("col_m_"):
+            dtype = pd.Series(dtype=column["dtype"])
+        elif column["value"].startswith("col_d_"):
+            dtype = pd.Series(dtype="datetime64[ns, utc]")
+        else:
+            dtype = pd.Series(dtype="float")
+        df_columns[f"{column['value']}{column['name']}"] = dtype
+
+    for column, is_add in other.items():
+        if is_add:
+            df_columns[column] = pd.Series(dtype="object")
+
+    df = pd.DataFrame(df_columns)
+
+    # df = _add_required_columns(df) # see what happens if this is added
+    df = from_df_to_db(df, add_index=True)
+    # get default tempalte
+    default_template = Template.objects(name="Default").get()
+
+    # save the file to the DB
+    document = Document(
+        name=name, author=user, state=df, source="Manual", template=default_template
+    )
+    document.save()
+    # save the default setup to the DB
+    setup = Setup(
+        name="Default", author=user, documentId=document, default=True, state=df
+    )
+    setup.save()
+    return jsonify({"msg": "Document successfully uploaded", "success": True})
+
+
 def get_document_columns(file_id):
     """
     Retrieves a Document columns
@@ -68,9 +131,10 @@ def get_document_columns(file_id):
     user = User.objects(id=id["$oid"]).get()
     file = Document.objects(id=file_id, author=user).get()
     df = from_db_to_df(file.state)
-
-    data_columns = df.dtypes
     columns = []
+    data_columns = file.state["fields"] if df.empty else df.dtypes
+
+    # check if DataFrame is emtpy. If it is then get data from elsewhere (create utils function).
     for name, col_type in data_columns.items():
         columns.append(
             {
@@ -94,6 +158,13 @@ def get_document_compare(file_id):
     # implied that column names will not differ between setups and its document
     df = from_db_to_df(setups[0].state)
     metric_list = [col for col in df if re.match(r"col_[vpr]_", col)]
+    if not metric_list:
+        return jsonify(
+            {
+                "msg": "Insufficient data to compare",
+                "success": False,
+            }
+        )
     metric = metric_list[0] if metric is None else metric
 
     setups_compared = []
@@ -103,6 +174,7 @@ def get_document_compare(file_id):
         setups_compared.append(current)
 
     response = {
+        "success": True,
         "data": setups_compared,
         "metrics": [[metric, parse_column_name(metric)] for metric in metric_list],
         "active": parse_column_name(metric),
@@ -127,7 +199,7 @@ def get_calendar_table(document_id):
     metric = metric_list[0] if metric is None else metric
     date = date_list[0] if date is None else date
     # Reset index to get the index column passed in to the JSON
-    table = df.reset_index().to_json(orient="records")
+    table = df.reset_index().to_json(orient="records", date_format="iso")
     table = json.loads(table)
     response = {
         "table": table,
@@ -179,8 +251,13 @@ def post_document():
         return jsonify({"msg": err.message, "success": False})
 
     # save the file to the DB
+    default_template = Template.objects(name="Default").get()
     document = Document(
-        name=file.filename, author=user, state=df, source=source_map[file_source]
+        name=file.filename,
+        author=user,
+        state=df,
+        source=source_map[file_source],
+        template=default_template,
     )
     document.save()
     # save the default setup to the DB
@@ -265,6 +342,10 @@ def update_document(file_id):
     else:
         return jsonify({"msg": "Something went wrong. Try again!", "success": False})
 
+    template_type = file.template.name
+    if template_type == "PPT":
+        update_mappings_to_template(file, index, data, method)
+
     try:
         update_setups(file.id)
     except Exception as err:
@@ -290,3 +371,170 @@ def delete_document(file_id):
         return jsonify({"msg": "Document successfully deleted", "success": True})
     except:
         return jsonify({"msg": "Document does not exist", "success": False})
+
+
+async def create_meta_account(account: str, password: str, server: str):
+    """
+    Create a MT4 account on MetaApi
+    """
+
+    token = os.getenv("METAAPI_TOKEN")
+    api = MetaApi(token)
+    print(token, api)
+    try:
+        new_account = NewMetatraderAccountDto(
+            magic=123456,
+            login=account,
+            name=f"{account}+{server}",
+            password=password,
+            server=server,
+            platform="mt4",
+            type="cloud-g1",
+            keywords=[server],
+        )
+
+        # alternatively one could also connect through account_id
+        account = await api.metatrader_account_api.create_account(new_account)
+
+        initial_state = account.state
+        deployed_states = ["DEPLOYING", "DEPLOYED"]
+
+        if initial_state not in deployed_states:
+            #  wait until account is deployed and connected to broker
+            await account.deploy()
+
+        print(
+            "Waiting for API server to connect to broker (may take couple of minutes)"
+        )
+        await account.wait_connected()
+
+        # connect to MetaApi API
+        connection = account.get_rpc_connection()
+        await connection.connect()
+
+        # TODO: this step break the code
+        # wait until terminal state synchronized to the local state
+        # print('Waiting for SDK to synchronize to terminal state (may take some time depending on your history size)')
+        # await connection.wait_synchronized()
+
+        # invoke RPC API (replace ticket numbers with actual ticket numbers which exist in your MT account)
+        # get account deals for the last 10 years
+        days = 365 * 10
+        trade_history = await connection.get_deals_by_time_range(
+            datetime.utcnow() - timedelta(days=days), datetime.utcnow()
+        )
+
+        # close connnection and remove account
+        await connection.close()
+
+        # TODO: I could also delete account here
+
+        return {
+            "deals": trade_history["deals"],
+            "account_id": account.id,
+            "success": True,
+        }
+    except Exception as err:
+        if (
+            str(err)
+            == "Free subscription plan allows you to create no more than 2 trading accounts for personal use free of charge"
+        ):
+            try:
+                all_accounts = await api.metatrader_account_api.get_accounts()
+                account_to_delete = all_accounts[0]
+                print(account_to_delete)
+
+                await account_to_delete.remove()
+                await account_to_delete.wait_removed()
+                return await create_meta_account(account, password, server)
+            except Exception as err:
+                return {"success": False}
+
+        return {"success": False}
+
+
+async def fetch_metatrader():
+    """
+    Fetch account directly from MetaTrader. It requires account, passsword, server and platform.
+    """
+    id = get_jwt_identity()
+    user = User.objects(id=id["$oid"]).get()
+
+    account = request.json.get("account", None)
+    password = request.json.get("password", None)
+    server = request.json.get("server", None)
+
+    # check if file exists
+    is_file_exists = Document.objects(name=f"{account}+{server}", author=user)
+    if len(is_file_exists) > 0:
+        return jsonify({"msg": "This file already exists", "success": False})
+
+    meta_account = await create_meta_account(account, password, server)
+
+    if meta_account["success"]:
+
+        df = upaload_meta_api(meta_account["deals"])
+        default_template = Template.objects(name="Default").get()
+
+        # TODO: is probably better not to store this information
+        document = Document(
+            name=f"{account}+{server}",
+            author=user,
+            state=df,
+            source="MT4 API",
+            template=default_template,
+            metaapi_id=meta_account["account_id"],
+            meta_account=account,
+            meta_password=password,
+            meta_server=server,
+        )
+        document.save()
+
+        # save the default setup to the DB
+        setup = Setup(
+            name="Default", author=user, documentId=document, default=True, state=df
+        )
+        setup.save()
+
+        return jsonify({"msg": "Document successfully uploaded", "success": True})
+
+    else:
+        return jsonify(
+            {"msg": "Something went wrong. Try again later.", "success": False}
+        )
+
+
+async def refetch_document(file_id):
+    """ "
+    Refetches a Document and updates it
+    """
+
+    # TODO: this could be done better by only adding the new deals.
+    # TODO: this could be improved by checking if account it is still active
+
+    id = get_jwt_identity()
+    user = User.objects(id=id["$oid"]).get()
+    # get credentials
+    file = Document.objects(id=file_id, author=user).get()
+    # get meta trader account
+    meta_account = await create_meta_account(
+        file.meta_account, file.meta_password, file.meta_server
+    )
+
+    if not meta_account["success"]:
+        return jsonify(
+            {"msg": "Something went wrong. Try again later.", "success": False}
+        )
+
+    df = upaload_meta_api(meta_account["deals"])
+
+    file.state = df
+    file.metaapi_id = meta_account["account_id"]
+    file.save()
+
+    try:
+        update_setups(file.id)
+    except Exception as err:
+        return jsonify({"msg": "Something went wrong. Try again!", "success": False})
+
+    return jsonify({"msg": "Document updated correctly!", "success": True})

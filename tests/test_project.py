@@ -12,5 +12,4 @@ def test_utils():
 def test_routes():
     with app.test_client() as test_client:
         response = test_client.get("/documents")
-        print(response)
         assert "hello" == "hello"

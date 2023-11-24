@@ -68,6 +68,8 @@ def upload_mt4(file):
 
     df.drop(index=df.index[0:1], axis=0, inplace=True)
     df = df[df["Type"] != "balance"]  # remove balance deposit
+    df = df[df["Commission"] != "cancelled"]  # remove cancelled trades
+
     df.index = np.arange(1, len(df) + 1)
 
     # rename prices columns to open & close
@@ -82,12 +84,20 @@ def upload_mt4(file):
     df.columns = new_cols
 
     # parse dates
-    df.loc[:, "Open Time"] = pd.to_datetime(
+    df["Open Time"] = pd.to_datetime(
         df["Open Time"], format="%Y.%m.%d %H:%M:%S", utc=True
     )
-    df.loc[:, "Close Time"] = pd.to_datetime(
+    df["Close Time"] = pd.to_datetime(
         df["Close Time"], format="%Y.%m.%d %H:%M:%S", utc=True
     )
+    # NOTE: the method in below does not work:
+    # https://github.com/pandas-dev/pandas/issues/53729
+    # df.loc[:, "Open Time"] = pd.to_datetime(
+    #     df["Open Time"], format="%Y.%m.%d %H:%M:%S", utc=True
+    # )
+    # df.loc[:, "Close Time"] = pd.to_datetime(
+    #     df["Close Time"], format="%Y.%m.%d %H:%M:%S", utc=True
+    # )
 
     convert_dict = {
         "Size": "float",

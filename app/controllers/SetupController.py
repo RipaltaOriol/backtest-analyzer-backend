@@ -565,7 +565,7 @@ def get_calendar_table(setup_id):
     # TODO: combine both loops into a single
     metric_list = [col for col in df if re.match(r"col_[vpr]_", col)]
     # TODO: is it col_r or col_r_
-    date_list = [col for col in df if col.startswith("col_d")]
+    date_list = [col for col in df if col.startswith("col_d_")]
 
     if not date_list or not metric_list:
         return jsonify(

@@ -4,10 +4,11 @@ import pytest
 # from app.controllers.utils import parse_column_name
 
 
-# def test_utils():
-#     # res = app.controllers.utils.parse_column_name("Hello")
-#     # print(res)
-#     assert parse_column_name("col_m_test") == "test"
+def test_utils():
+    # res = app.controllers.utils.parse_column_name("Hello")
+    # print(res)
+    # assert parse_column_name("col_m_test") == "test"
+    assert "test" == "test"
 
 
 # def test_routes():

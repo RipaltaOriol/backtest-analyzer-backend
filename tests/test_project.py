@@ -1,5 +1,6 @@
 import pytest
-from app import app
+
+# from app import app
 from app.controllers.utils import parse_column_name
 
 

@@ -240,7 +240,7 @@ def post_document():
     try:
         if file_source == "default":
             df = upload_default(file)
-        elif file_source == "mt4":
+        elif file_source == "mt4_file":
             df = upload_mt4(file)
         else:
             return jsonify(

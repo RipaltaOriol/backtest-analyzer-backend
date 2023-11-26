@@ -62,7 +62,7 @@ app.config["JWT_COOKIE_CSRF_PROTECT"] = True
 # app.config["JWT_REFRESH_TOKEN_EXPIRES"] = timedelta(minutes = 1)
 
 # DB connection
-connect(host=app.config["MONGO_URI"])
+connect(host=os.getenv("MONGO_URI"))
 
 from app.routes.auth_bp import auth_bp
 from app.routes.document_bp import document_bp

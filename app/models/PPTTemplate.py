@@ -2,8 +2,8 @@ from enum import Enum
 
 from app.models.Document import Document
 from app.models.Setup import Setup
-from bson.json_util import dumps
 from app.models.User import User
+from bson.json_util import dumps
 from mongoengine.document import DynamicDocument, EmbeddedDocument
 from mongoengine.fields import (
     BooleanField,
@@ -90,7 +90,7 @@ class PPTTemplate(DynamicDocument):
     quote_fundamental = EnumField(CurrencyReading)
     reason = StringField()
 
-    positions = ListField(EmbeddedDocumentField(EntryPosition))
+    positions = ListField(EmbeddedDocumentField(EntryPosition), default=list)
     stop_loss = FloatField()
     take_profit = ListField(EmbeddedDocumentField(TakeProfit))
 

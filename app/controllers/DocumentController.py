@@ -28,12 +28,14 @@ from app.models.Document import Document
 from app.models.Setup import Setup
 from app.models.Template import Template
 from app.models.User import User
+from bson import DBRef, ObjectId, json_util
 from flask import jsonify, request
 from flask_jwt_extended import get_jwt_identity
-from metaapi_cloud_sdk import MetaApi
-from metaapi_cloud_sdk.clients.metaApi.metatraderAccount_client import (
-    NewMetatraderAccountDto,
-)
+
+# from metaapi_cloud_sdk import MetaApi
+# from metaapi_cloud_sdk.clients.metaApi.metatraderAccount_client import (
+#     NewMetatraderAccountDto,
+# )
 
 source_map = {"default": "Default", "mt4_file": "MT4 File", "mt4_api": "MT4 API"}
 
@@ -42,16 +44,71 @@ def get_documents():
     """
     Retrieves All Documents
     """
-    documents = []
+
+    pipeline = [
+        {
+            "$lookup": {
+                "from": Setup._get_collection_name(),
+                "localField": "_id",
+                "foreignField": "documentId",
+                "as": "setups",
+            }
+        },
+        {
+            "$lookup": {
+                "from": Template._get_collection_name(),
+                "localField": "template",
+                "foreignField": "_id",
+                "as": "template",
+            }
+        },
+        {
+            "$project": {
+                "_id": 0,
+                "id": {"$toString": "$_id"},
+                "name": 1,
+                "source": 1,
+                "template": {
+                    "$let": {
+                        "vars": {"firstTemplate": {"$arrayElemAt": ["$template", 0]}},
+                        "in": {
+                            "name": "$$firstTemplate.name",
+                            "id": {"$toString": "$$firstTemplate._id"},
+                        },
+                    }
+                },
+                "date": {
+                    "$dateToString": {
+                        "format": "%Y-%m-%dT%H:%M:%S.%LZ",
+                        "date": {"$toDate": "$date_created"},
+                    }
+                },
+                "setups": {
+                    "$map": {
+                        "input": "$setups",
+                        "as": "setup",
+                        "in": {
+                            "id": {"$toString": "$$setup._id"},
+                            "name": "$$setup.name",
+                            "isDefault": "$$setup.default",
+                            "date": {
+                                "$dateToString": {
+                                    "format": "%Y-%m-%dT%H:%M:%S.%LZ",
+                                    "date": {"$toDate": "$$setup.date_created"},
+                                }
+                            },
+                        },
+                    }
+                },
+            }
+        },
+    ]
+
     id = get_jwt_identity()
     user = User.objects(id=id["$oid"]).get()
-    files = Document.objects(author=user)
-    for file in files:
-        single_file = file.with_children()
-        single_file["setups"] = get_children(single_file["id"])
-        documents.append(single_file)
-    response = jsonify(documents)
-    return response
+    documents = Document.objects(author=user).aggregate(pipeline)
+    documents = json.loads(json_util.dumps(documents))
+    return jsonify(documents)
 
 
 def get_document(file_id):
@@ -131,7 +188,7 @@ def get_document_columns(file_id):
     file = Document.objects(id=file_id, author=user).get()
     df = from_db_to_df(file.state)
     columns = []
-    data_columns = file.state["fields"] if df.empty else df.dtypes
+    data_columns = file.state["fields"]
 
     # check if DataFrame is emtpy. If it is then get data from elsewhere (create utils function).
     for name, col_type in data_columns.items():
@@ -300,7 +357,7 @@ def clone_document(file_id):
     return jsonify({"msg": "Document successfully copied", "success": True})
 
 
-def update_document(file_id):
+def put_document_row(file_id):
     """
     Updates a Document by either: add, update or delete a given row
 
@@ -350,6 +407,8 @@ def update_document(file_id):
         update_mappings_to_template(file, index, data, method)
 
     try:
+        # TODO: this does not look like a great solution
+        # TODO: the code inside it does not look like it's efficient - overkill for what I'm looking to achieve
         update_setups(file.id)
     except Exception as err:
         return jsonify({"msg": "Something went wrong. Try again!", "success": False})
@@ -382,78 +441,79 @@ async def create_meta_account(account: str, password: str, server: str):
     """
 
     token = os.getenv("METAAPI_TOKEN")
-    api = MetaApi(token)
-    print(token, api)
-    try:
-        new_account = NewMetatraderAccountDto(
-            magic=123456,
-            login=account,
-            name=f"{account}+{server}",
-            password=password,
-            server=server,
-            platform="mt4",
-            type="cloud-g1",
-            keywords=[server],
-        )
+    return {"success": False}
+    # api = MetaApi(token)
+    # print(token, api)
+    # try:
+    #     new_account = NewMetatraderAccountDto(
+    #         magic=123456,
+    #         login=account,
+    #         name=f"{account}+{server}",
+    #         password=password,
+    #         server=server,
+    #         platform="mt4",
+    #         type="cloud-g1",
+    #         keywords=[server],
+    #     )
 
-        # alternatively one could also connect through account_id
-        account = await api.metatrader_account_api.create_account(new_account)
+    #     # alternatively one could also connect through account_id
+    #     account = await api.metatrader_account_api.create_account(new_account)
 
-        initial_state = account.state
-        deployed_states = ["DEPLOYING", "DEPLOYED"]
+    #     initial_state = account.state
+    #     deployed_states = ["DEPLOYING", "DEPLOYED"]
 
-        if initial_state not in deployed_states:
-            #  wait until account is deployed and connected to broker
-            await account.deploy()
+    #     if initial_state not in deployed_states:
+    #         #  wait until account is deployed and connected to broker
+    #         await account.deploy()
 
-        print(
-            "Waiting for API server to connect to broker (may take couple of minutes)"
-        )
-        await account.wait_connected()
+    #     print(
+    #         "Waiting for API server to connect to broker (may take couple of minutes)"
+    #     )
+    #     await account.wait_connected()
 
-        # connect to MetaApi API
-        connection = account.get_rpc_connection()
-        await connection.connect()
+    #     # connect to MetaApi API
+    #     connection = account.get_rpc_connection()
+    #     await connection.connect()
 
-        # TODO: this step break the code
-        # wait until terminal state synchronized to the local state
-        # print('Waiting for SDK to synchronize to terminal state (may take some time depending on your history size)')
-        # await connection.wait_synchronized()
+    #     # TODO: this step break the code
+    #     # wait until terminal state synchronized to the local state
+    #     # print('Waiting for SDK to synchronize to terminal state (may take some time depending on your history size)')
+    #     # await connection.wait_synchronized()
 
-        # invoke RPC API (replace ticket numbers with actual ticket numbers which exist in your MT account)
-        # get account deals for the last 10 years
-        days = 365 * 10
-        trade_history = await connection.get_deals_by_time_range(
-            datetime.utcnow() - timedelta(days=days), datetime.utcnow()
-        )
+    #     # invoke RPC API (replace ticket numbers with actual ticket numbers which exist in your MT account)
+    #     # get account deals for the last 10 years
+    #     days = 365 * 10
+    #     trade_history = await connection.get_deals_by_time_range(
+    #         datetime.utcnow() - timedelta(days=days), datetime.utcnow()
+    #     )
 
-        # close connnection and remove account
-        await connection.close()
+    #     # close connnection and remove account
+    #     await connection.close()
 
-        # TODO: I could also delete account here
+    #     # TODO: I could also delete account here
 
-        return {
-            "deals": trade_history["deals"],
-            "account_id": account.id,
-            "success": True,
-        }
-    except Exception as err:
-        if (
-            str(err)
-            == "Free subscription plan allows you to create no more than 2 trading accounts for personal use free of charge"
-        ):
-            try:
-                all_accounts = await api.metatrader_account_api.get_accounts()
-                account_to_delete = all_accounts[0]
-                print(account_to_delete)
+    #     return {
+    #         "deals": trade_history["deals"],
+    #         "account_id": account.id,
+    #         "success": True,
+    #     }
+    # except Exception as err:
+    #     if (
+    #         str(err)
+    #         == "Free subscription plan allows you to create no more than 2 trading accounts for personal use free of charge"
+    #     ):
+    #         try:
+    #             all_accounts = await api.metatrader_account_api.get_accounts()
+    #             account_to_delete = all_accounts[0]
+    #             print(account_to_delete)
 
-                await account_to_delete.remove()
-                await account_to_delete.wait_removed()
-                return await create_meta_account(account, password, server)
-            except Exception as err:
-                return {"success": False}
+    #             await account_to_delete.remove()
+    #             await account_to_delete.wait_removed()
+    #             return await create_meta_account(account, password, server)
+    #         except Exception as err:
+    #             return {"success": False}
 
-        return {"success": False}
+    #     return {"success": False}
 
 
 async def fetch_metatrader():

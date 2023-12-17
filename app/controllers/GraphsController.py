@@ -49,8 +49,12 @@ def get_line(df, result_columns, current_metric: str) -> str:
         equity = 10000
         points = []
         for i in range(len(df[column])):
-            equity = calculate_equity(equity, df[column].iloc[i], method)
-            points.append(equity)
+            point = df[column].iloc[i]
+            if point is not None:
+                equity = calculate_equity(equity, df[column].iloc[i], method)
+                points.append(equity)
+            else:
+                points.append(None)
 
         datasets.append({"label": column[6:], "data": points})
 
@@ -96,13 +100,6 @@ def get_line(df, result_columns, current_metric: str) -> str:
 
 def get_scatter(df, result_columns, metric_columns, current_metric: str) -> str:
     data = []
-    if len(result_columns) == 0 or len(metric_columns) == 0:
-        return jsonify(
-            {
-                "success": False,
-                "msg": "Not enough data to compute",
-            }
-        )
 
     metric_num = None
     metric_list = [
@@ -110,6 +107,14 @@ def get_scatter(df, result_columns, metric_columns, current_metric: str) -> str:
         for col in metric_columns
         if df.dtypes[col] == "int64" or df.dtypes[col] == "float64"
     ]
+
+    if len(result_columns) == 0 or len(metric_list) == 0:
+        return jsonify(
+            {
+                "success": False,
+                "msg": "Not enough data to compute",
+            }
+        )
 
     if current_metric in metric_columns:
         metric_num = current_metric
@@ -121,19 +126,31 @@ def get_scatter(df, result_columns, metric_columns, current_metric: str) -> str:
 
     labels = {
         "title": f"{parse_column_name(metric_num)} to Results",
-        "axes": metric_num[6:],
+        "axes": parse_column_name(metric_num),
     }
     for res in result_columns:
         dataset = {
             "label": res[6:],
-            "data": [
-                {
-                    "x": round(float(df.loc[i, metric_num]), 3),
-                    "y": round(float(normalize_results(df.loc[i, res], res)), 3),
-                }
-                for i in df.index
-            ],
+            # "data": [
+            #     {
+            #         "x": round(float(df.loc[i, metric_num]), 3),
+            #         "y": round(float(normalize_results(df.loc[i, res], res)), 3),
+            #     }
+            #     for i in df.index
+            # ],
         }
+        dataset_data = []
+        for i in df.index:
+            result_point = df.loc[i, res]
+            metric_point = df.loc[i, metric_num]
+            if result_point is not None and metric_point is not None:
+                dataset_data.append(
+                    {
+                        "x": round(float(metric_point), 3),
+                        "y": round(float(normalize_results(result_point, res)), 3),
+                    }
+                )
+        dataset["data"] = dataset_data
         data.append(dataset)
     return jsonify(
         {

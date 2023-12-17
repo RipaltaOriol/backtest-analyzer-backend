@@ -64,3 +64,6 @@ target/
 
 # Ignore Jupyter Notebook
 devnotebook.ipynb
+
+# Ignore profiles
+.profile

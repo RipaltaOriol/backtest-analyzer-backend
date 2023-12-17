@@ -3,10 +3,20 @@ import uuid
 from datetime import date, datetime
 from io import StringIO
 
+import numpy as np
 import pandas as pd
 
 TEMPLATE_PPT_POSITIONS = ["size", "order_type", "risk_reward", "price", "risk"]
 TEMPLATE_PPT_TAKE_PROFIT = "take_profit"
+
+
+class CustomJSONizer(json.JSONEncoder):
+    def default(self, obj):
+        return (
+            super().encode(bool(obj))
+            if isinstance(obj, np.bool_)
+            else super().default(obj)
+        )
 
 
 def json_serial(obj):
@@ -43,6 +53,15 @@ def parse_column_name(column_name):
     elif column_name == "col_d":
         column_name = "Direction"
     return column_name
+
+
+def get_result_decorator(column_name):
+    if column_name.startswith("col_r_"):
+        return " RR"
+    elif column_name.startswith("col_p_"):
+        return "%"
+    else:
+        return ""
 
 
 def normalize_results(val, result):
@@ -93,7 +112,8 @@ def from_df_to_db(df, add_index=False):
     data = df.to_json(orient="index", date_format="iso", date_unit="s")
     data = json.loads(data)
 
-    return {"fields": df.dtypes.apply(lambda x: x.name).to_dict(), "data": data}
+    # return {"fields": df.dtypes.apply(lambda x: x.name).to_dict(), "data": data}
+    return data
 
 
 def truncate(float, decimals):
@@ -139,3 +159,47 @@ def row_to_ppt_template(mappings, template, row):
                 template[template_k] = value
 
     return template
+
+
+def retrieve_filter_options(data: pd.DataFrame):
+    """
+    Accepts a DataFrame object from a Setup or Document and returns an array with the options to filter
+    """
+    options = []
+
+    map_types = data.dtypes
+    options = []
+    for column in data.columns:
+        if column.startswith("col_m_"):
+            option = {"id": column, "name": column[6:]}
+            if map_types[column] == "float64" or map_types[column] == "int64":
+                option.update(type="number")
+            else:
+                option.update(type="string")
+                option.update(values=list(data[column].dropna().unique()))
+            options.append(option)
+        if column.startswith("col_p"):
+            option = {
+                "id": column,
+                "name": "Pair",
+                "type": "string",
+                "values": list(data[column].dropna().unique()),
+            }
+            options.append(option)
+        if column.startswith("col_rr"):
+            option = {
+                "id": column,
+                "name": "Risk Reward",
+                "type": "number",
+                "values": list(data[column].dropna().unique()),
+            }
+            options.append(option)
+        if column.startswith("col_d_"):
+            option = {
+                "id": column,
+                "name": column[6:],
+                "type": "date",
+            }
+            options.append(option)
+    options = json.loads(json.dumps(options, cls=CustomJSONizer))
+    return options

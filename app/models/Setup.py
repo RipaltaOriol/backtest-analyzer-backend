@@ -70,4 +70,14 @@ class Setup(DynamicDocument):
 
         return json.dumps(setup_compare)
 
-    meta = {"collection": "setups", "ordering": ["-date_created"]}
+    meta = {
+        "collection": "setups",
+        "ordering": ["-date_created"],
+        "indexes": [
+            "author",
+            "#author",
+        ],
+    }
+
+
+# TODO: sorting by documentId could be useful

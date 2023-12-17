@@ -54,5 +54,5 @@ def reset_state_from_document(setup_id):
     df = from_db_to_df(document.state)
     for filter in setup.filters:
         df = apply_filter(df, filter.column, filter.operation, filter.value)
-    state = from_df_to_db(df)
-    setup.modify(state=state)
+    data = from_df_to_db(df)
+    setup.modify(__raw__={"$set": {"state.data": data}})

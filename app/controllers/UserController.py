@@ -1,8 +1,8 @@
 import json
 
 from app.controllers.ErrorController import handle_401, handle_403
-from app.models.User import User
 from app.models.Template import Template
+from app.models.User import User
 from app.models.UserSettings import UserSettings
 from bson import json_util
 from flask import jsonify, request
@@ -154,5 +154,5 @@ def refresh():
 
 
 def authorized():
-    """Test Route: Check if Authorized"""
+    """Route: Check if Authorized"""
     return jsonify({"status": "OK"})

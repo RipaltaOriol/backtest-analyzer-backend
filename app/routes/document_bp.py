@@ -2,6 +2,7 @@ from app.controllers.DocumentController import (
     clone_document,
     create_document,
     delete_document,
+    fetch_metatrader,
     get_calendar_table,
     get_document,
     get_document_columns,
@@ -9,16 +10,13 @@ from app.controllers.DocumentController import (
     get_documents,
     post_document,
     put_document,
-    update_document,
-    fetch_metatrader,
+    put_document_row,
     refetch_document,
 )
-
 from app.controllers.TemplateController import (
     assing_template_to_document,
     get_template_mapping,
 )
-
 from flask import Blueprint
 from flask_jwt_extended import jwt_required
 
@@ -41,7 +39,9 @@ document_bp.route("/<file_id>/columns", methods=["GET"])(
 document_bp.route("/<file_id>/compare", methods=["GET"])(
     jwt_required()(get_document_compare)
 )
-document_bp.route("/<file_id>/update", methods=["PUT"])(jwt_required()(update_document))
+document_bp.route("/<file_id>/update", methods=["PUT"])(
+    jwt_required()(put_document_row)
+)
 document_bp.route("/<file_id>/refetch", methods=["PUT"])(
     jwt_required()(refetch_document)
 )

@@ -1,19 +1,20 @@
 from app.controllers.PDFController import get_file
 from app.controllers.SetupController import (
     delete_setup,
+    get_bubble_results,
+    get_calendar_table,
+    get_cumulative_results,
+    get_daily_distribution,
     get_graphics,
     get_graphs,
+    get_net_results,
     get_setup,
+    get_setup_row,
     get_setups,
     get_statistics,
     post_setup,
     put_setup,
-    get_setup_row,
     put_setup_row,
-    get_daily_distribution,
-    get_net_results,
-    get_cumulative_results,
-    get_calendar_table,
 )
 from flask import Blueprint
 from flask_jwt_extended import jwt_required
@@ -34,8 +35,14 @@ setup_bp.route("/<setup_id>/charts", methods=["GET"])(jwt_required()(get_graphic
 setup_bp.route("/<setup_id>/graphs", methods=["GET"])(jwt_required()(get_graphs))
 
 # API calls for setup rows
-setup_bp.route("/<setup_id>/<row_id>", methods=["GET"])(jwt_required()(get_setup_row))
+setup_bp.route("/<document_id>/<row_id>", methods=["GET"])(
+    jwt_required()(get_setup_row)
+)
 setup_bp.route("/<setup_id>/<row_id>", methods=["POST"])(jwt_required()(put_setup_row))
+
+setup_bp.route("<setup_id>/charts/bubble", methods=["GET"])(
+    jwt_required()(get_bubble_results)
+)
 
 setup_bp.route("/<setup_id>/stats/daily", methods=["GET"])(
     jwt_required()(get_daily_distribution)

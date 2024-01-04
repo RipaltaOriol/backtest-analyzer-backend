@@ -179,6 +179,15 @@ def get_bar(df, result_columns, metric_columns, current_metric: str):
     metric_str = None
     metric_list = [col for col in metric_columns if df.dtypes[col] == "object"]
 
+    # this handles the issue that takes place when afer parsing to find string metrics none are found.
+    if not metric_list:
+        return jsonify(
+            {
+                "success": False,
+                "msg": "Not enough data to compute",
+            }
+        )
+
     if current_metric in metric_columns:
         metric_str = current_metric
     else:

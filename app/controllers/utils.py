@@ -1,4 +1,5 @@
 import json
+import re
 import uuid
 from datetime import date, datetime
 from io import StringIO
@@ -178,15 +179,15 @@ def retrieve_filter_options(data: pd.DataFrame):
                 option.update(type="string")
                 option.update(values=list(data[column].dropna().unique()))
             options.append(option)
-        if column.startswith("col_p"):
+        if column == "col_p":
             option = {
                 "id": column,
                 "name": "Pair",
                 "type": "string",
-                "values": list(data[column].dropna().unique()),
+                "values": list(data[column].dropna().unique().astype(str)),
             }
             options.append(option)
-        if column.startswith("col_rr"):
+        if column == "col_rr":
             option = {
                 "id": column,
                 "name": "Risk Reward",
@@ -203,3 +204,21 @@ def retrieve_filter_options(data: pd.DataFrame):
             options.append(option)
     options = json.loads(json.dumps(options, cls=CustomJSONizer))
     return options
+
+
+def validation_pipeline(data):
+    """
+    This helper function validates and sanitizes the data before returning it
+    to be added to the database.
+    """
+    # TODO create test for this function
+    for column in data.keys():
+        # sanitizes and parses percentage columns
+        if re.match(r"col_p_", column):
+            # check if value is present
+            if data[column]:
+                data[column] = float(data[column]) / 100
+            else:
+                data[column] = None
+
+    return data

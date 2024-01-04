@@ -60,10 +60,6 @@ def post_user_template(templateId):
     return {"success": True, "msg": "Template added successfully."}
 
 
-def test_migration():
-    return "Test Migration"
-
-
 def login():
     """Login User"""
     email = request.json.get("email", None)

@@ -50,7 +50,12 @@ def upload_default(file):
         # parse images from CSV
         df["imgs"] = df["imgs"].apply(lambda x: x.split("^") if x else [])
 
-        return from_df_to_db(df, add_index=True)
+        state = {
+            "data": from_df_to_db(df, add_index=True),
+            "fields": df.dtypes.apply(lambda x: x.name).to_dict(),
+        }
+
+        return state
     else:
         # NOTE: change this to pass the error, otherwise it will fail
         return jsonify({"msg": "File is not an accepted format", "success": False})
@@ -147,7 +152,13 @@ def upload_mt4(file):
 
     # add all required columns
     df = _add_required_columns(df)
-    return from_df_to_db(df, add_index=True)
+
+    state = {
+        "data": from_df_to_db(df, add_index=True),
+        "fields": df.dtypes.apply(lambda x: x.name).to_dict(),
+    }
+
+    return state
 
 
 def _add_required_columns(df):
@@ -219,4 +230,9 @@ def upaload_meta_api(data):
     # add all required columns
     df = _add_required_columns(df)
 
-    return from_df_to_db(df, add_index=False)
+    state = {
+        "data": from_df_to_db(df, add_index=False),
+        "fields": df.dtypes.apply(lambda x: x.name).to_dict(),
+    }
+
+    return state

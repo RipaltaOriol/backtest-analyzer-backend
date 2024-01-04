@@ -23,6 +23,7 @@ from app.controllers.utils import (
     from_df_to_db,
     parse_column_name,
     parse_column_type,
+    validation_pipeline,
 )
 from app.models.Document import Document
 from app.models.Setup import Setup
@@ -38,6 +39,17 @@ from flask_jwt_extended import get_jwt_identity
 # )
 
 source_map = {"default": "Default", "mt4_file": "MT4 File", "mt4_api": "MT4 API"}
+
+OTHER_COLUMNS_TYPE_MAPPING = {
+    "col_p": "object",
+    "col_o": "float",
+    "col_c": "float",
+    "col_rr": "float",
+    "col_sl": "float",
+    "col_tp": "float",
+    "col_t": "object",
+    "col_d": "object",
+}
 
 
 def get_documents():
@@ -138,7 +150,7 @@ def create_document():
     columns = request.json.get("fields", None)
     other = request.json.get("checkbox", None)
 
-    # # check if file exists
+    # check if file exists
     is_file_exists = Document.objects(name=name, author=user)
     if len(is_file_exists) > 0:
         return jsonify({"msg": "This file already exists", "success": False})
@@ -157,23 +169,27 @@ def create_document():
 
     for column, is_add in other.items():
         if is_add:
-            df_columns[column] = pd.Series(dtype="object")
+            df_columns[column] = pd.Series(
+                dtype=OTHER_COLUMNS_TYPE_MAPPING.get(column, "object")
+            )
 
     df = pd.DataFrame(df_columns)
 
     # df = _add_required_columns(df) # see what happens if this is added
-    df = from_df_to_db(df, add_index=True)
+    data = from_df_to_db(df, add_index=True)
+    state = {"data": data, "fields": df.dtypes.apply(lambda x: x.name).to_dict()}
+
     # get default tempalte
     default_template = Template.objects(name="Default").get()
 
     # save the file to the DB
     document = Document(
-        name=name, author=user, state=df, source="Manual", template=default_template
+        name=name, author=user, state=state, source="Manual", template=default_template
     )
     document.save()
     # save the default setup to the DB
     setup = Setup(
-        name="Default", author=user, documentId=document, default=True, state=df
+        name="Default", author=user, documentId=document, default=True, state=state
     )
     setup.save()
     return jsonify({"msg": "Document successfully uploaded", "success": True})
@@ -345,13 +361,19 @@ def clone_document(file_id):
         new_name = original + " Copy_" + str(copy_counter)
         is_file_exists = Document.objects(name=new_name)
 
-    new_df = from_df_to_db(from_db_to_df(file.state), add_index=True)
+    new_df = from_db_to_df(file.state)
+    new_data = from_df_to_db(new_df, add_index=True)
+    new_state = {
+        "data": new_data,
+        "fields": new_df.dtypes.apply(lambda x: x.name).to_dict(),
+    }
+
     # save the copy to the DB
-    document = Document(name=new_name, author=user, state=new_df, source=file.source)
+    document = Document(name=new_name, author=user, state=new_state, source=file.source)
     document.save()
     # save the default setup to the DB
     setup = Setup(
-        name="Default", author=user, documentId=document, default=True, state=new_df
+        name="Default", author=user, documentId=document, default=True, state=new_state
     )
     setup.save()
     return jsonify({"msg": "Document successfully copied", "success": True})
@@ -366,8 +388,9 @@ def put_document_row(file_id):
     method = request.json.get("method", None)
     data = request.json.get("data", None)
 
-    file = Document.objects(id=file_id).get()
+    data = validation_pipeline(data)
 
+    document = Document.objects(id=file_id).get()
     if method == "add":
         # create index for new row
         index = uuid.uuid4().hex
@@ -400,16 +423,16 @@ def put_document_row(file_id):
 
     template_type = None
 
-    if file.template:
-        template_type = file.template.name
+    if document.template:
+        template_type = document.template.name
 
     if template_type == "PPT":
-        update_mappings_to_template(file, index, data, method)
+        update_mappings_to_template(document, index, data, method)
 
     try:
-        # TODO: this does not look like a great solution
-        # TODO: the code inside it does not look like it's efficient - overkill for what I'm looking to achieve
-        update_setups(file.id)
+        document = Document.objects(id=file_id).first()
+        document_df = from_db_to_df(document.state)
+        update_setups(document.id, document_df)
     except Exception as err:
         return jsonify({"msg": "Something went wrong. Try again!", "success": False})
 

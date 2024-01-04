@@ -1,9 +1,9 @@
+from app.controllers.utils import parse_mappings, row_to_ppt_template
 from app.models.Document import Document
+from app.models.PPTTemplate import EntryPosition, PPTTemplate, TakeProfit
 from app.models.Setup import Setup
-from flask import jsonify
 from bson import ObjectId
-from app.models.PPTTemplate import PPTTemplate, TakeProfit, EntryPosition
-from app.controllers.utils import row_to_ppt_template, parse_mappings
+from flask import jsonify
 
 
 def update_ppt_row(document, row_id, row):
@@ -84,8 +84,21 @@ def update_mappings_to_template(document, id, row, method):
     """
     Update mapptings from a row to a template.
     """
-    print(method)
+    # TODO:
+    # problem with this huge!
+    # additioanlly I should make a transaction and only enter if all enter. Otherwise this creates weird write problems
+    # also deal with broken message in the frontend
+    # this ticket should probably be part of data validation (big one xd)
 
+    row["col_sl"] = float(row["col_sl"])
+    row["col_tp"] = float(row["col_tp"])
+    row["col_o"] = float(row["col_o"])
+    row["col_c"] = float(row["col_c"])
+    row["col_rr"] = float(row["col_rr"])
+    row["col_m_Position Size"] = float(row["col_m_Position Size"])
+    row["col_v_PnL"] = float(row["col_v_PnL"])
+    row["col_v_No Intervention"] = float(row["col_v_No Intervention"])
+    row["col_m_Pips"] = float(row["col_m_Pips"])
     if method == "delete":
         PPTTemplate.objects(row_id=id, document=document).delete()
 

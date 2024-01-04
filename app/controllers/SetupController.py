@@ -11,9 +11,10 @@ from app import app
 from app.controllers.ErrorController import handle_403
 from app.controllers.GraphsController import get_bar, get_line, get_pie, get_scatter
 from app.controllers.RowController import update_default_row, update_ppt_row
-from app.controllers.setup_utils import reset_state_from_document
+from app.controllers.setup_utils import apply_filter
 from app.controllers.utils import (
     from_db_to_df,
+    from_df_to_db,
     get_result_decorator,
     normalize_results,
     parse_column_name,
@@ -138,33 +139,6 @@ def get_setups():
         del setup["document"]
 
     return jsonify(setups)
-
-
-def get_setup(document_id, setup_id):
-    """Retrieves One Setup
-    NOTE: no use - delete in future
-    NOTE: deprecated - delete
-    """
-    id = get_jwt_identity()
-    user = User.objects(id=id["$oid"]).get()
-    setup = Setup.objects(author=user, id=setup_id, documentId=document_id).get()
-    # NOTE: second condition not necessary (ther is still some state in string formal: remove after) - it may still give errors
-    if not setup.state:
-        document = Document.objects(id=setup.documentId.id).get()
-        # NOTE: this method probably needs improvement
-        target = os.path.join(app.root_path, app.config["UPLOAD_FOLDER"], document.path)
-        df = pd.read_csv(target)
-        df = df.to_json(orient="table")
-        df = json.loads(df)
-        setup.modify(state=df)
-
-    response = setup.to_json()
-    response = json.loads(response)
-    # include filter options
-    filter_options = get_filter_options(document_id)
-    response.update(options=filter_options)
-    response = json.dumps(response)
-    return Response(response, mimetype="application/json")
 
 
 def post_setup():
@@ -356,8 +330,8 @@ def get_statistics(setup_id):
             "drawdown": round(data["drawdown"].min(), 3)
             if not math.isnan(data["drawdown"].min())
             else None,
-            "total": f"{round(total[col], 3)}{column_decorator}",  # bug here with nan
-            "mean": f"{round(mean[col], 2)}",  # bug here with nan
+            "total": round(total[col], 3),
+            "mean": round(mean[col], 3),  # bug here with nan
             "wins": wins[col],
             "losses": losses[col],
             "breakEvens": break_even[col],
@@ -375,24 +349,8 @@ def get_statistics(setup_id):
             else None,
             "profit_factor": round(total_wins / abs(total_losses), 2)
             if total_losses
-            else total_wins,
+            else round(total_wins, 2),
         }
-
-    statistics = [
-        count,
-        total,
-        mean,
-        wins,
-        losses,
-        break_even,
-        win_rate,
-        avg_win,
-        avg_loss,
-        expectancy,
-        max_consec_loss,
-        max_win,
-        drawdown,
-    ]
 
     response = jsonify(data=response, success=True)
     return response
@@ -455,6 +413,8 @@ def get_graphs(setup_id):
 
     if "col_rr" in data.columns:
         metric_columns.append("col_rr")
+    if "col_p" in data.columns:
+        metric_columns.append("col_p")
 
     # remove rows with no results recorded
     # data.dropna(subset=result_columns, inplace=True) # handle this
@@ -518,13 +478,17 @@ def get_filter_options(doucment_id):
     return options
 
 
-def update_setups(document_id):
+def update_setups(document_id, document_df: pd.DataFrame):
     """
     Updates the setups state from parent state
     """
+    df = document_df
     setups = Setup.objects(documentId=document_id)
     for setup in setups:
-        reset_state_from_document(setup.id)
+        for filter in setup.filters:
+            df = apply_filter(df, filter.column, filter.operation, filter.value)
+        data = from_df_to_db(df)
+        setup.modify(__raw__={"$set": {"state.data": data}})
 
 
 def get_children(document_id):
@@ -582,7 +546,8 @@ def get_daily_distribution(setup_id):
             weekday_mean[day] = (
                 round(week_df.loc[day, col], 3) if day in week_df.index else 0
             )
-        response[col] = weekday_mean
+            result_column = parse_column_name(col)
+        response[result_column] = weekday_mean
     return jsonify({"success": True, "data": response})
 
 
@@ -767,7 +732,7 @@ def get_calendar_table(setup_id):
     metric = metric_list[0] if metric is None else metric
     date = date_list[0] if date is None else date
     # Reset index to get the index column passed in to the JSON
-    table = df.reset_index().to_json(orient="records", date_format="iso")
+    table = df.reset_index(names="rowId").to_json(orient="records", date_format="iso")
     table = json.loads(table)
     response = {
         "success": True,

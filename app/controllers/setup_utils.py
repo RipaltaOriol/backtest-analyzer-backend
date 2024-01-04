@@ -43,16 +43,3 @@ def apply_filter(df, column, operation, value):
         elif operation == "ne":
             df = df[df[column] != value]
     return df
-
-
-def reset_state_from_document(setup_id):
-
-    setup = Setup.objects(id=setup_id).get()
-    # establish remaining filters
-    document = Document.objects(id=setup.documentId.id).get()
-
-    df = from_db_to_df(document.state)
-    for filter in setup.filters:
-        df = apply_filter(df, filter.column, filter.operation, filter.value)
-    data = from_df_to_db(df)
-    setup.modify(__raw__={"$set": {"state.data": data}})

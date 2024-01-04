@@ -1,21 +1,16 @@
-from app.models.Document import Document
-from app.models.Template import Template
-from app.models.PPTTemplate import PPTTemplate, TakeProfit, EntryPosition
 import re
+
+from app.controllers.utils import from_db_to_df, parse_column_name, parse_column_type
+from app.models.Document import Document
+from app.models.PPTTemplate import EntryPosition, PPTTemplate, TakeProfit
+from app.models.Template import Template
 from flask import jsonify, request
-from app.controllers.utils import (
-    from_db_to_df,
-    parse_column_name,
-    parse_column_type,
-)
 
 
 def fetch_template_mappings(document, user, document_state, mappings):
 
     # list of templates to insert
     templates = []
-
-    print(mappings)
 
     # TODO: potential vectorization improvement
     # for prop, mapping in mappings.items():

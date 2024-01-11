@@ -1,5 +1,6 @@
 from datetime import datetime
 
+import pandas as pd
 from app.controllers.utils import normalize_results, parse_column_name
 from flask import jsonify
 
@@ -36,6 +37,8 @@ def get_line(df, result_columns, current_metric: str) -> str:
         return "Bad"
 
     if metric_date != "default":
+        df = df.dropna(subset=[metric_date])
+        df[metric_date] = pd.to_datetime(df[metric_date])
         df.sort_values(by=[metric_date], inplace=True)
 
     for column in result_columns:
@@ -104,8 +107,8 @@ def get_scatter(df, result_columns, metric_columns, current_metric: str) -> str:
     metric_num = None
     metric_list = [
         col
-        for col in metric_columns
-        if df.dtypes[col] == "int64" or df.dtypes[col] == "float64"
+        for col, dtype in metric_columns.items()
+        if dtype == "int64" or dtype == "float64"
     ]
 
     if len(result_columns) == 0 or len(metric_list) == 0:
@@ -152,6 +155,7 @@ def get_scatter(df, result_columns, metric_columns, current_metric: str) -> str:
                 )
         dataset["data"] = dataset_data
         data.append(dataset)
+
     return jsonify(
         {
             "success": True,
@@ -177,7 +181,7 @@ def get_bar(df, result_columns, metric_columns, current_metric: str):
         )
 
     metric_str = None
-    metric_list = [col for col in metric_columns if df.dtypes[col] == "object"]
+    metric_list = [col for col, dtype in metric_columns.items() if dtype == "object"]
 
     # this handles the issue that takes place when afer parsing to find string metrics none are found.
     if not metric_list:

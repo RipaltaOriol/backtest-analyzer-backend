@@ -8,6 +8,7 @@ from io import StringIO
 import numpy as np
 import pandas as pd
 from app import app
+from app.controllers.db_pipelines.template_pipelines import get_ppt_template_row
 from app.controllers.ErrorController import handle_403
 from app.controllers.GraphsController import get_bar, get_line, get_pie, get_scatter
 from app.controllers.RowController import update_default_row, update_ppt_row
@@ -26,6 +27,7 @@ from app.models.PPTTemplate import PPTTemplate
 from app.models.Setup import Setup
 from app.models.Template import Template
 from app.models.User import User
+from app.utils.encoders import NpEncoder
 from bson import DBRef, ObjectId, json_util
 from flask import jsonify, request
 from flask.wrappers import Response
@@ -211,8 +213,8 @@ def delete_setup(setup_id):
 def get_setup_row(document_id, row_id):
     """
     NOTE: replace this at another location
+    It takes in a document_id and row_id and returns the matching row object in JSON format.
     """
-
     id = get_jwt_identity()
     user = User.objects(id=id["$oid"]).get()
     document = Document.objects(id=document_id).get()
@@ -222,16 +224,20 @@ def get_setup_row(document_id, row_id):
     # return {"asset": setup.state["data"][row_id]["col_p"]}
 
     row = PPTTemplate.objects(document=document_id, row_id=row_id)
-    if row:
-        row = row.get()
-    else:
-
+    if not row:
         # NOTE: make a funciton to create an empty one
+        # NOTE: I do not know if this works tbh!!!
         row = PPTTemplate(author=user, document=document, row_id=row_id).save()
 
-    response = json.loads(row.to_json())
-    response.update(success=True)
-    return response
+    # row.aggregate(pipeline2)
+    try:
+        query = next(row.aggregate(get_ppt_template_row))
+        response = json.loads(json_util.dumps(query))
+        return response
+
+    except StopIteration:
+        print("Document not found.")
+        return {jsonify({"msg": "Something went wrong.", "success": False})}
 
 
 def put_setup_row(setup_id, row_id):
@@ -352,8 +358,12 @@ def get_statistics(setup_id):
             else round(total_wins, 2),
         }
 
-    response = jsonify(data=response, success=True)
-    return response
+    response = {
+        "data": response,
+        "success": True,
+    }
+    response = json.dumps(response, cls=NpEncoder)
+    return Response(response, mimetype="application/json")
 
 
 def get_graphics(setup_id):
@@ -409,12 +419,12 @@ def get_graphs(setup_id):
     result_columns = [
         column for column in data.columns if re.match(r"col_[vpr]_", column)
     ]
-    metric_columns = [col for col in data if col.startswith("col_m_")]
 
-    if "col_rr" in data.columns:
-        metric_columns.append("col_rr")
-    if "col_p" in data.columns:
-        metric_columns.append("col_p")
+    metric_columns = {
+        k: v
+        for k, v in setup.state["fields"].items()
+        if k == "col_rr" or k == "col_p" or k.startswith("col_m_")
+    }
 
     # remove rows with no results recorded
     # data.dropna(subset=result_columns, inplace=True) # handle this

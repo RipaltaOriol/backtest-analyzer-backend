@@ -127,6 +127,7 @@ def truncate(float, decimals):
 
 
 def parse_mappings(trade, template_k):
+    # TODO: potentially assign fallbacks to the rest of cases
     # case for positions
     if template_k in TEMPLATE_PPT_POSITIONS:
         return trade["positions"][0][template_k]
@@ -136,7 +137,7 @@ def parse_mappings(trade, template_k):
         return trade["take_profit"][0][template_k]
 
     else:
-        return trade[template_k]
+        return trade.get(template_k, None)
 
 
 def row_to_ppt_template(mappings, template, row):
@@ -145,7 +146,7 @@ def row_to_ppt_template(mappings, template, row):
 
         if state_k:
 
-            value = row[state_k]
+            value = row.get(state_k, None)
 
             if template_k in TEMPLATE_PPT_POSITIONS:
                 template["positions"][0][
@@ -219,6 +220,10 @@ def validation_pipeline(data):
             if data[column]:
                 data[column] = float(data[column]) / 100
             else:
+                data[column] = None
+        if re.match(r"col_v_", column):
+            # check if value is present
+            if not data[column]:
                 data[column] = None
 
     return data

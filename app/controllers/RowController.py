@@ -87,18 +87,9 @@ def update_mappings_to_template(document, id, row, method):
     # TODO:
     # problem with this huge!
     # additioanlly I should make a transaction and only enter if all enter. Otherwise this creates weird write problems
-    # also deal with broken message in the frontend
+    # also deal with broken message in the frontend (attempt to break it by setting a wrong data type on insertion)
     # this ticket should probably be part of data validation (big one xd)
 
-    row["col_sl"] = float(row["col_sl"])
-    row["col_tp"] = float(row["col_tp"])
-    row["col_o"] = float(row["col_o"])
-    row["col_c"] = float(row["col_c"])
-    row["col_rr"] = float(row["col_rr"])
-    row["col_m_Position Size"] = float(row["col_m_Position Size"])
-    row["col_v_PnL"] = float(row["col_v_PnL"])
-    row["col_v_No Intervention"] = float(row["col_v_No Intervention"])
-    row["col_m_Pips"] = float(row["col_m_Pips"])
     if method == "delete":
         PPTTemplate.objects(row_id=id, document=document).delete()
 

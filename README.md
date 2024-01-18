@@ -1,17 +1,21 @@
-# This is the backest analyzer
+# Trade Sharpener: Server
+*Formally known as Backtest Analyzer*
 
-# Remove Later
-Server
+Trade Sharpener is an online, fully customizable trading journal with a focus on data analysis and optimization. Its purpose is to empower traders and enable them to quantify and enhance their trading strategies by taking control of their data.
 
-The backend code is located inside the server directory. Navigate to this directory.
+The application consists of three modules: a non-relational database, an API server, and a client interface. The client obtains information from the backend via diverse API calls and makes use of the cache to prevent redundant requests, thereby enhancing its performance and reliability.
+Once the user uploads their data to Trade Sharpener through one of the multiple supported methods, the server discerns this information and runs a series of pipelines and validation filters. This process ensures the data is stored in a uniform structure. Therefore, allowing information to be easily compared, contrasted, and modified if necessary.
 
-Frist create a virtual environment by running python3 -m venv venv inside the directory.
-Activat the local environemnt through source venv/bin/activate
-To download all the dependencies run pip install -r server/requirements.txt
-Start the server by running python3 run.py
-Client
+Moreover, Trade Sharpener provides users with several features to support them in their analysis, including smart filters, note-taking capabilities, template selection, detailed statistics, and a comprehensive array of graphs for data visualization.
 
-The frontend code is located inside the client directory. Navigate to this directory.
-
-To install all the dependencies run npm install
-Start the client by running npm start
+## Stack:
+-	Python 3.8
+-	Flask (Python framework)
+-	NoSQL
+-	Mongoengine (NoSQL ORM for Python)
+-	Pandas
+-	JWT
+-	FPDF2
+-	Matplotlib
+-	Black (formatter)
+-	GHA (CI/CD)

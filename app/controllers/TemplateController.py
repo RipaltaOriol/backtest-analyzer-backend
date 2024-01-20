@@ -1,21 +1,16 @@
-from app.models.Document import Document
-from app.models.Template import Template
-from app.models.PPTTemplate import PPTTemplate, TakeProfit, EntryPosition
 import re
+
+from app.controllers.utils import from_db_to_df, parse_column_name, parse_column_type
+from app.models.Document import Document
+from app.models.PPTTemplate import EntryPosition, PPTTemplate, TakeProfit
+from app.models.Template import Template
 from flask import jsonify, request
-from app.controllers.utils import (
-    from_db_to_df,
-    parse_column_name,
-    parse_column_type,
-)
 
 
 def fetch_template_mappings(document, user, document_state, mappings):
 
     # list of templates to insert
     templates = []
-
-    print(mappings)
 
     # TODO: potential vectorization improvement
     # for prop, mapping in mappings.items():
@@ -97,11 +92,10 @@ def assing_template_to_document(document_id, template_id):
 
     document.save()
 
-    print(document.template)
-
     # TODO: setup templates
     # TODO: how does it know what tempalte uses this?
     # if mappings then perform the preliminary mapping (fetch)
+    # TODO: problem if the account is empty
     if is_mappings:
         fetch_template_mappings(document, document.author, document.state, mappings)
 
@@ -117,9 +111,7 @@ def get_template_mapping(document_id):
     """Get a breakdown of column types and names to act as a template mapping helper"""
     document = Document.objects(id=document_id).get()
 
-    df = from_db_to_df(document.state)
-
-    columns = df.columns
+    columns = document.state["fields"]
 
     response = {
         "col_p": "col_p" in columns,

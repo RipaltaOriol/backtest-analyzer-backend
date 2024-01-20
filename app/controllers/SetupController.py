@@ -1,4 +1,6 @@
+import datetime
 import json
+import math
 import os
 import re
 from io import StringIO
@@ -6,15 +8,27 @@ from io import StringIO
 import numpy as np
 import pandas as pd
 from app import app
+from app.controllers.db_pipelines.template_pipelines import get_ppt_template_row
 from app.controllers.ErrorController import handle_403
 from app.controllers.GraphsController import get_bar, get_line, get_pie, get_scatter
 from app.controllers.RowController import update_default_row, update_ppt_row
-from app.controllers.setup_utils import reset_state_from_document
-from app.controllers.utils import from_db_to_df, parse_column_name
+from app.controllers.setup_utils import apply_filter
+from app.controllers.utils import (
+    from_db_to_df,
+    from_df_to_db,
+    get_result_decorator,
+    normalize_results,
+    parse_column_name,
+    retrieve_filter_options,
+)
 from app.models.Document import Document
+from app.models.Filter import Filter
 from app.models.PPTTemplate import PPTTemplate
 from app.models.Setup import Setup
+from app.models.Template import Template
 from app.models.User import User
+from app.utils.encoders import NpEncoder
+from bson import DBRef, ObjectId, json_util
 from flask import jsonify, request
 from flask.wrappers import Response
 from flask_jwt_extended import get_jwt_identity
@@ -31,54 +45,102 @@ class CustomJSONizer(json.JSONEncoder):
 
 
 def get_setups():
-    """Retrieves All Setups"""
-    id = get_jwt_identity()
-    user = User.objects(id=id["$oid"]).get()
-    setups = Setup.objects(author=user)
+    """
+    Retrieves All Setups for a given User
 
-    response = []
+    TODO: this query in the main one to be called by the app. It should be optimized as much
+    as possible. Here are some suggestions for small improvements.
+
+    https://stackoverflow.com/questions/16586180/typeerror-objectid-is-not-json-serializable (JSONEncoder)
+    https://stackoverflow.com/questions/30333299/pymongo-bson-convert-python-cursor-cursor-object-to-serializable-json-object
+    (using bsonjs)
+    """
+    id = get_jwt_identity()
+
+    pipeline = [
+        {
+            "$lookup": {
+                "from": Document._get_collection_name(),
+                "localField": "documentId",
+                "foreignField": "_id",
+                "as": "document",
+            },
+        },
+        {
+            "$lookup": {
+                "from": Template._get_collection_name(),
+                "localField": "document.template",
+                "foreignField": "_id",
+                "as": "template",
+            },
+        },
+        {
+            "$lookup": {
+                "from": Filter._get_collection_name(),
+                "localField": "filters",
+                "foreignField": "_id",
+                "as": "filters",
+            },
+        },
+        {
+            "$addFields": {
+                "filters": {
+                    "$map": {
+                        "input": "$filters",
+                        "as": "filter",
+                        "in": {
+                            "$mergeObjects": [
+                                "$$filter",
+                                {"id": {"$toString": "$$filter._id"}},
+                            ]
+                        },
+                    }
+                }
+            }
+        },
+        {"$sort": {"document._id": -1}},
+        {
+            "$project": {
+                "_id": 1,
+                "name": 1,
+                "notes": 1,
+                "default": 1,
+                "template.name": 1,
+                "state": 1,
+                "date_created": {"$dateToString": {"date": "$date_created"}},
+                "document.state": 1,
+                "document._id": 1,
+                "filters.id": 1,
+                "filters.name": 1,
+            }
+        },
+    ]
+
+    setups = Setup.objects(author=id["$oid"]).aggregate(pipeline)
+
+    setups = json.loads(json_util.dumps(setups))
+
+    df = None
+    document_id = None
+
     for setup in setups:
-        current = setup.to_json()
-        current = json.loads(current)
-        options = get_filter_options(setup.documentId.id)
-        template = setup.documentId.template.name if setup.documentId.template else {}
 
-        current.update(template=template)
-        current.update(options=options)
-        response.append(current)
+        setup["id"] = setup["_id"]["$oid"]
+        # setup["date_created"] = setup["date_created"].isoformat()
+        document = setup["document"][0]
+        setup["documentId"] = document["_id"]["$oid"]
 
-    response = json.dumps(response, cls=CustomJSONizer)
-    return Response(response, mimetype="application/json")
-    # return jsonify(response)
-    # return jsonify([json.loads(setup.to_json()) for setup in setups])
+        if not setup["documentId"] == document_id or not isinstance(df, pd.DataFrame):
+            df = from_db_to_df(document["state"])
+            document_id = setup["documentId"]
 
+        setup["template"] = setup["template"][0]["name"] if setup["template"] else None
+        setup["options"] = retrieve_filter_options(df)
 
-""" Retrieves One Setup
-    NOTE: no use - delete in future
-"""
+        del setup["_id"]
+        del setup["document"]
 
-
-def get_setup(document_id, setup_id):
-    id = get_jwt_identity()
-    user = User.objects(id=id["$oid"]).get()
-    setup = Setup.objects(author=user, id=setup_id, documentId=document_id).get()
-    # NOTE: second condition not necessary (ther is still some state in string formal: remove after) - it may still give errors
-    if not setup.state:
-        document = Document.objects(id=setup.documentId.id).get()
-        # NOTE: this method probably needs improvement
-        target = os.path.join(app.root_path, app.config["UPLOAD_FOLDER"], document.path)
-        df = pd.read_csv(target)
-        df = df.to_json(orient="table")
-        df = json.loads(df)
-        setup.modify(state=df)
-
-    response = setup.to_json()
-    response = json.loads(response)
-    # include filter options
-    filter_options = get_filter_options(document_id)
-    response.update(options=filter_options)
-    response = json.dumps(response)
-    return Response(response, mimetype="application/json")
+    return jsonify(setups)
 
 
 def post_setup():
@@ -148,27 +210,34 @@ def delete_setup(setup_id):
     return jsonify({"msg": "Setup successfully deleted", "success": True})
 
 
-def get_setup_row(setup_id, row_id):
-
+def get_setup_row(document_id, row_id):
+    """
+    NOTE: replace this at another location
+    It takes in a document_id and row_id and returns the matching row object in JSON format.
+    """
     id = get_jwt_identity()
     user = User.objects(id=id["$oid"]).get()
-    setup = Setup.objects(id=setup_id).get()
+    document = Document.objects(id=document_id).get()
 
-    if not setup_id or not row_id:
+    if not document_id or not row_id:
         return {jsonify({"msg": "Something went wrong.", "success": False})}
     # return {"asset": setup.state["data"][row_id]["col_p"]}
-    setup_row = PPTTemplate.objects(document=setup.documentId, row_id=row_id)
-    if setup_row:
-        setup_row = setup_row.get()
 
-    else:
-        setup_row = PPTTemplate(
-            author=user, document=setup.documentId, setup=setup, row_id=row_id
-        ).save()
+    row = PPTTemplate.objects(document=document_id, row_id=row_id)
+    if not row:
+        # NOTE: make a funciton to create an empty one
+        # NOTE: I do not know if this works tbh!!!
+        row = PPTTemplate(author=user, document=document, row_id=row_id).save()
 
-    response = json.loads(setup_row.to_json())
-    response.update(success=True)
-    return response
+    # row.aggregate(pipeline2)
+    try:
+        query = next(row.aggregate(get_ppt_template_row))
+        response = json.loads(json_util.dumps(query))
+        return response
+
+    except StopIteration:
+        print("Document not found.")
+        return {jsonify({"msg": "Something went wrong.", "success": False})}
 
 
 def put_setup_row(setup_id, row_id):
@@ -218,6 +287,8 @@ def get_statistics(setup_id):
     drawdown = {"stat": "Drawdown"}
     for col in result_columns:
 
+        column_decorator = get_result_decorator(col)
+
         count[col] = 0
         total[col] = 0
         wins[col] = 0
@@ -232,8 +303,8 @@ def get_statistics(setup_id):
             # skip NaN values
             # if pd.isna(val):
             #     continue
-            count[col] += 1
-            total[col] += val
+            count[col] += 1 if not np.isnan(val) else 0
+            total[col] += val if not np.isnan(val) else 0
             if val > 0:
                 wins[col] += 1
                 total_wins += val
@@ -243,7 +314,7 @@ def get_statistics(setup_id):
                 total_losses += val
                 losses[col] += 1
                 current_losses += 1
-            else:
+            elif val == 0:
                 break_even[col] += 1
                 consecutive_losses = max(consecutive_losses, current_losses)
                 current_losses = 0
@@ -251,9 +322,8 @@ def get_statistics(setup_id):
         data["high_value"] = data["cumulative"].cummax()
         data["drawdown"] = data["cumulative"] - data["high_value"]
         drawdown[col] = float(data["drawdown"].min())
-        total[col] = round(total[col], 3)
-        mean[col] = total[col] / count[col]
-        win_rate[col] = wins[col] / count[col]
+        mean[col] = total[col] / count[col] if count[col] else 0
+        win_rate[col] = wins[col] / count[col] if count[col] else 0
         avg_win[col] = total_wins / wins[col] if wins[col] else 0
         avg_loss[col] = total_losses / losses[col] if losses[col] else 0
         expectancy[col] = (win_rate[col] * avg_win[col]) - (
@@ -263,43 +333,37 @@ def get_statistics(setup_id):
         max_win[col] = float(data[col].max())
         response[col] = {
             "count": count[col],
-            "drawdown": float(data["drawdown"].min()),
+            "drawdown": round(data["drawdown"].min(), 3)
+            if not math.isnan(data["drawdown"].min())
+            else None,
             "total": round(total[col], 3),
-            "mean": round(total[col] / count[col], 2),
+            "mean": round(mean[col], 3),  # bug here with nan
             "wins": wins[col],
             "losses": losses[col],
             "breakEvens": break_even[col],
-            "win_rate": round(wins[col] / count[col], 3),
-            "avg_win": total_wins / wins[col] if wins[col] else 0,
-            "avg_loss": total_losses / losses[col] if losses[col] else 0,
+            "win_rate": round(wins[col] / count[col], 4) if count[col] else 0,
+            "avg_win": round(total_wins / wins[col], 2) if wins[col] else 0,
+            "avg_loss": round(total_losses / losses[col], 2) if losses[col] else 0,
             "expectancy": round(
                 (win_rate[col] * avg_win[col])
                 - ((1 - win_rate[col]) * abs(avg_loss[col])),
                 2,
             ),
             "max_consec_loss": max(consecutive_losses, current_losses),
-            "max_win": float(data[col].max()),
-            "profit_factor": total_wins / abs(total_losses),
+            "max_win": round(data[col].max(), 2)
+            if not math.isnan(data[col].max())
+            else None,
+            "profit_factor": round(total_wins / abs(total_losses), 2)
+            if total_losses
+            else round(total_wins, 2),
         }
 
-    statistics = [
-        count,
-        total,
-        mean,
-        wins,
-        losses,
-        break_even,
-        win_rate,
-        avg_win,
-        avg_loss,
-        expectancy,
-        max_consec_loss,
-        max_win,
-        drawdown,
-    ]
-
-    response = jsonify(response)
-    return response
+    response = {
+        "data": response,
+        "success": True,
+    }
+    response = json.dumps(response, cls=NpEncoder)
+    return Response(response, mimetype="application/json")
 
 
 def get_graphics(setup_id):
@@ -355,13 +419,16 @@ def get_graphs(setup_id):
     result_columns = [
         column for column in data.columns if re.match(r"col_[vpr]_", column)
     ]
-    metric_columns = [col for col in data if col.startswith("col_m_")]
 
-    if "col_rr" in data.columns:
-        metric_columns.append("col_rr")
+    metric_columns = {
+        k: v
+        for k, v in setup.state["fields"].items()
+        if k == "col_rr" or k == "col_p" or k.startswith("col_m_")
+    }
 
-    # remove rows with not results recorded
-    data.dropna(subset=result_columns, inplace=True)
+    # remove rows with no results recorded
+    # data.dropna(subset=result_columns, inplace=True) # handle this
+    data.replace({np.nan: None}, inplace=True)
 
     if type == "scatter":
         return get_scatter(data, result_columns, metric_columns, current_metric)
@@ -381,6 +448,7 @@ def get_filter_options(doucment_id):
     document = Document.objects(id=doucment_id).get()
 
     data = from_db_to_df(document.state)
+    data.replace({np.nan: None}, inplace=True)
 
     map_types = data.dtypes
     options = []
@@ -420,13 +488,17 @@ def get_filter_options(doucment_id):
     return options
 
 
-def update_setups(document_id):
+def update_setups(document_id, document_df: pd.DataFrame):
     """
     Updates the setups state from parent state
     """
+    df = document_df
     setups = Setup.objects(documentId=document_id)
     for setup in setups:
-        reset_state_from_document(setup.id)
+        for filter in setup.filters:
+            df = apply_filter(df, filter.column, filter.operation, filter.value)
+        data = from_df_to_db(df)
+        setup.modify(__raw__={"$set": {"state.data": data}})
 
 
 def get_children(document_id):
@@ -484,7 +556,8 @@ def get_daily_distribution(setup_id):
             weekday_mean[day] = (
                 round(week_df.loc[day, col], 3) if day in week_df.index else 0
             )
-        response[col] = weekday_mean
+            result_column = parse_column_name(col)
+        response[result_column] = weekday_mean
     return jsonify({"success": True, "data": response})
 
 
@@ -513,7 +586,7 @@ def get_net_results(setup_id):
 
     data = {}
     for column in result_columns:
-        data[column] = df[column].tolist()
+        data[column] = df[column].replace({np.nan: None}).tolist()
 
     result = {"success": True, "labels": list(range(1, len(df.index))), "data": data}
 
@@ -546,11 +619,106 @@ def get_cumulative_results(setup_id):
 
     data = {}
     for column in result_columns:
-        data[column] = df[column].cumsum().tolist()
+        data[column] = df[column].cumsum().replace({np.nan: None}).tolist()
 
     result = {"success": True, "labels": list(range(1, len(df.index))), "data": data}
 
     return jsonify(result)
+
+
+# TODO: move this to its own route setup/id/stats/{stats_id}
+def get_bubble_results(setup_id):
+    """
+    ....
+    """
+    id = get_jwt_identity()
+    user = User.objects(id=id["$oid"]).get()
+    setup = Setup.objects(author=user, id=setup_id).get()
+
+    args = request.args
+    current_metric = args.get("currentMetric")
+
+    df = from_db_to_df(setup.state)
+    df.replace({np.nan: None}, inplace=True)
+
+    data = []
+
+    metric_list = [
+        col
+        for col in df.columns
+        if col.startswith("col_m_")
+        and (df.dtypes[col] == "int64" or df.dtypes[col] == "float64")
+    ]
+    result_columns = [
+        column for column in df.columns if re.match(r"col_[vpr]_", column)
+    ]
+
+    if len(result_columns) == 0 or len(metric_list) == 0:
+        return jsonify(
+            {
+                "success": False,
+                "msg": "Not enough data to compute",
+            }
+        )
+
+    if "col_rr" not in df.columns:
+        return jsonify(
+            {
+                "success": False,
+                "msg": "Risk Reward is not available in this account",
+            }
+        )
+
+    metric_num = None
+
+    if current_metric in metric_list:
+        metric_num = current_metric
+    else:
+        metric_num = metric_list[0]
+
+    if metric_num == None:
+        return "Bad"
+
+    for res in result_columns:
+        dataset = {
+            "label": res[6:],
+        }
+        dataset_data = []
+        for i in df.index:
+            result_point = df.loc[i, res]
+            metric_point = df.loc[i, metric_num]
+            rrr_point = df.loc[i, "col_rr"]
+            if (
+                result_point is not None
+                and metric_point is not None
+                and rrr_point is not None
+            ):  # check also the RRR
+                dataset_data.append(
+                    {
+                        "x": round(float(metric_point), 3),
+                        "y": round(float(normalize_results(result_point, res)), 3),
+                        "r": round(rrr_point * 5, 3),
+                    }
+                )
+        dataset["data"] = dataset_data
+        data.append(dataset)
+
+    labels = {
+        "title": f"{parse_column_name(metric_num)} to Results and RRR",
+        "axes": parse_column_name(metric_num),
+    }
+
+    return jsonify(
+        {
+            "success": True,
+            "data": data,
+            "labels": labels,
+            "active_metric": metric_num,
+            "metric_list": [
+                [metric, parse_column_name(metric)] for metric in metric_list
+            ],
+        }
+    )
 
 
 def get_calendar_table(setup_id):
@@ -566,7 +734,6 @@ def get_calendar_table(setup_id):
     metric_list = [col for col in df if re.match(r"col_[vpr]_", col)]
     # TODO: is it col_r or col_r_
     date_list = [col for col in df if col.startswith("col_d_")]
-
     if not date_list or not metric_list:
         return jsonify(
             {"success": False, "msg": "Account does not contain any date information."}
@@ -575,7 +742,7 @@ def get_calendar_table(setup_id):
     metric = metric_list[0] if metric is None else metric
     date = date_list[0] if date is None else date
     # Reset index to get the index column passed in to the JSON
-    table = df.reset_index().to_json(orient="records", date_format="iso")
+    table = df.reset_index(names="rowId").to_json(orient="records", date_format="iso")
     table = json.loads(table)
     response = {
         "success": True,

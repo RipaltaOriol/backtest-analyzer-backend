@@ -1,16 +1,18 @@
 import json
 import os
-from io import StringIO
 from datetime import datetime
+from io import StringIO
+
 import numpy as np
 import pandas as pd
 from app import app
 from app.controllers.ErrorController import handle_403
 from app.controllers.SetupController import get_filter_options
-from app.controllers.utils import from_db_to_df, from_df_to_db
+from app.controllers.utils import from_db_to_df, from_df_to_db, retrieve_filter_options
 from app.models.Document import Document
 from app.models.Filter import Filter
 from app.models.Setup import Setup
+from bson import DBRef, ObjectId, json_util
 from flask import jsonify, request
 from flask.wrappers import Response
 
@@ -47,7 +49,6 @@ def apply_filter(df, column, operation, value):
         date_from = datetime.strptime(value[0], "%m/%d/%Y").strftime("%Y-%m-%d")
         date_to = datetime.strptime(value[1], "%m/%d/%Y").strftime("%Y-%m-%d")
         df = df.loc[(df[column] >= date_from) & (df[column] <= date_to)]
-        print(df)
 
     else:
         # update the value so that it only gets the first element
@@ -100,21 +101,21 @@ def get_filter_name(column, operation, value):
     return name
 
 
-def post_filter(setup_id):
+def post_filter(setup_id: str):
     """
     Adds a Filter to a Setup
     """
     column = request.json.get("column", None)
     operation = request.json.get("action", None)
     value = request.json.get("value", None)
-    setup = Setup.objects(id=setup_id).get()
+    setup = Setup.objects(id=setup_id).first()
     df = from_db_to_df(setup.state)
     if column == None or operation == None or value == None:
         return handle_403(msg="Filter is not valid")
 
     df = apply_filter(df, column, operation, value)
     name = get_filter_name(column, operation, value)
-    state = from_df_to_db(df)
+    data = from_df_to_db(df)
 
     filter = Filter(
         name=name,
@@ -123,26 +124,86 @@ def post_filter(setup_id):
         value=value,
     ).save()
 
-    setup.filters.append(filter)
-    setup.save()
-    setup.modify(state=state)
-    response = setup.to_json()
-    response = json.loads(response)
-    # loads options and appends them to setup
-    options = get_filter_options(setup.documentId.id)
-    response.update(options=options)
-    response = json.dumps(response, cls=CustomJSONizer)
+    is_updated = setup.modify(push__filters=filter, set__state__data=data)
 
-    return Response(response, mimetype="application/json")
+    if is_updated:
+        updated_setup = Setup.objects(id=setup_id).aggregate(
+            [
+                {
+                    "$lookup": {
+                        "from": Document._get_collection_name(),
+                        "localField": "documentId",
+                        "foreignField": "_id",
+                        "as": "document",
+                    },
+                },
+                {
+                    "$lookup": {
+                        "from": Filter._get_collection_name(),
+                        "localField": "filters",
+                        "foreignField": "_id",
+                        "as": "filters",
+                    },
+                },
+                {
+                    "$addFields": {
+                        "filters": {
+                            "$map": {
+                                "input": "$filters",
+                                "as": "filter",
+                                "in": {
+                                    "$mergeObjects": [
+                                        "$$filter",
+                                        {"id": {"$toString": "$$filter._id"}},
+                                    ]
+                                },
+                            }
+                        }
+                    }
+                },
+                {
+                    "$project": {
+                        "_id": 0,
+                        "id": {"$toString": "_id"},
+                        "default": 1,
+                        "filters.id": 1,
+                        "filters.name": 1,
+                        "documentId": {"$toString": "documentId"},
+                        "state": 1,
+                        "notes": 1,
+                        "name": 1,
+                        "date_created": {
+                            "$dateToString": {
+                                "format": "%Y-%m-%dT%H:%M:%S.%LZ",
+                                "date": {"$toDate": "$date_created"},
+                            }
+                        },
+                        "document.state": 1,
+                    }
+                },
+            ]
+        )
+
+        updated_setup = json.loads(json_util.dumps(updated_setup))[0]
+
+        df = from_db_to_df(updated_setup["document"][0]["state"])
+        updated_setup["options"] = retrieve_filter_options(df)
+
+        del updated_setup["document"]
+
+        return jsonify(updated_setup)
 
 
 def delete_filter(setup_id, filter_id):
     """
-    Adds a Filter to a Setup
+    Deletes a filter in a Setup. It first looks up the Filter and Setup. It deletes the Filter from the Setup and
+    restores its state from parent (Document). After, deletes the Filter from the database. Lastly, it returns the Setup.
+
+    TODO: I believe this function can be optimized
     """
     try:
-        setup = Setup.objects(id=setup_id).get()
-        filter_dlt = Filter.objects(id=filter_id).get()
+        setup = Setup.objects(id=setup_id).first()
+        filter_dlt = Filter.objects(id=filter_id).first()
         # delete filter instance in setup
         to_dlt = filter_dlt.pk
         setup.modify(pull__filters=to_dlt)
@@ -154,8 +215,8 @@ def delete_filter(setup_id, filter_id):
         for filter in setup.filters:
             df = apply_filter(df, filter.column, filter.operation, filter.value)
 
-        state = from_df_to_db(df)
-        setup.modify(state=state)
+        data = from_df_to_db(df)
+        setup.modify(set__state__data=data)
 
         # delete filter
         filter_dlt.delete()

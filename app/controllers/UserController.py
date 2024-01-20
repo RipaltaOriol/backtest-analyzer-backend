@@ -1,8 +1,8 @@
 import json
 
 from app.controllers.ErrorController import handle_401, handle_403
-from app.models.User import User
 from app.models.Template import Template
+from app.models.User import User
 from app.models.UserSettings import UserSettings
 from bson import json_util
 from flask import jsonify, request
@@ -58,10 +58,6 @@ def post_user_template(templateId):
     user_settings.update(add_to_set__templates=template_to_add)
 
     return {"success": True, "msg": "Template added successfully."}
-
-
-def test_migration():
-    return "Test Migration"
 
 
 def login():
@@ -154,5 +150,5 @@ def refresh():
 
 
 def authorized():
-    """Test Route: Check if Authorized"""
+    """Route: Check if Authorized"""
     return jsonify({"status": "OK"})

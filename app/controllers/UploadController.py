@@ -5,6 +5,9 @@ import numpy as np
 import pandas as pd
 from app.controllers.errors import UploadError
 from app.controllers.utils import from_df_to_db
+from app.controllers.validation_pipelines.upload_pipelines import (
+    df_column_datatype_validation,
+)
 from flask import jsonify
 
 REQUIRED_COLUMNS = ["note", "imgs"]
@@ -17,29 +20,14 @@ def upload_default(file):
         # transform Dataframe
         df = pd.read_csv(file, keep_default_na=False)
 
-        # parse date columns
-        date_regex = re.compile("col_d_")
-        date_columns = list(filter(date_regex.match, df.columns))
-        for col in date_columns:
-            df[col] = pd.to_datetime(df[col], format="%d/%m/%y %H:%M:%S", utc=True)
+        # TODO: in docs make a note for how to add percentages
 
-        # TODO: include in documentation
-        df = df.replace("", np.nan)
-        # images and note can have empty values & but if blank give it a default
-        df_empty_check = df.drop(["note", "imgs"], axis=1, errors="ignore")
-        df_nans = np.where(pd.isnull(df_empty_check))
-        is_df_contains_nan = len(df_nans[0]) > 0
-        if is_df_contains_nan:
+        try:
+            df = df_column_datatype_validation(df)
+        except ValueError as e:
             raise UploadError(
-                "File contains empty cells. Remove them or fix them before resubmit."
+                "One or more column value are miscellaneous and do not satisfy typing conditions."
             )
-
-        if "col_d" in df.columns:
-            for val in df["col_d"].values:
-                if val.lower() != "long" and val.lower() != "short":
-                    raise UploadError(
-                        "Some direction values are invalid. Fix them before resubmit."
-                    )
 
         # add all required columns
         df = _add_required_columns(df)
@@ -49,11 +37,14 @@ def upload_default(file):
         df["note"] = df["note"].fillna("")
         # parse images from CSV
         df["imgs"] = df["imgs"].apply(lambda x: x.split("^") if x else [])
+        state = {
+            "data": from_df_to_db(df, add_index=True),
+            "fields": df.dtypes.apply(lambda x: x.name).to_dict(),
+        }
 
-        return from_df_to_db(df, add_index=True)
+        return state
     else:
-        # NOTE: change this to pass the error, otherwise it will fail
-        return jsonify({"msg": "File is not an accepted format", "success": False})
+        raise UploadError("File is not an accepted format.")
 
 
 def upload_mt4(file):
@@ -147,7 +138,13 @@ def upload_mt4(file):
 
     # add all required columns
     df = _add_required_columns(df)
-    return from_df_to_db(df, add_index=True)
+
+    state = {
+        "data": from_df_to_db(df, add_index=True),
+        "fields": df.dtypes.apply(lambda x: x.name).to_dict(),
+    }
+
+    return state
 
 
 def _add_required_columns(df):
@@ -219,4 +216,9 @@ def upaload_meta_api(data):
     # add all required columns
     df = _add_required_columns(df)
 
-    return from_df_to_db(df, add_index=False)
+    state = {
+        "data": from_df_to_db(df, add_index=False),
+        "fields": df.dtypes.apply(lambda x: x.name).to_dict(),
+    }
+
+    return state

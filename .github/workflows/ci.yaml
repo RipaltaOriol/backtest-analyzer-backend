@@ -2,8 +2,16 @@ name: CI
 
 on:
   push:
+    branches:
+      - master
+      - staging
   pull_request:
-
+    branches:
+      - master
+      - staging
+    types:
+      - ready_for_review
+      - review_requested
 jobs:
   run-tests:
     strategy:

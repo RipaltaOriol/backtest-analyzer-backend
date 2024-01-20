@@ -23,35 +23,104 @@ from app.controllers.utils import (
     from_df_to_db,
     parse_column_name,
     parse_column_type,
+    validation_pipeline,
 )
 from app.models.Document import Document
 from app.models.Setup import Setup
 from app.models.Template import Template
 from app.models.User import User
+from bson import DBRef, ObjectId, json_util
 from flask import jsonify, request
 from flask_jwt_extended import get_jwt_identity
-from metaapi_cloud_sdk import MetaApi
-from metaapi_cloud_sdk.clients.metaApi.metatraderAccount_client import (
-    NewMetatraderAccountDto,
-)
+
+# from metaapi_cloud_sdk import MetaApi
+# from metaapi_cloud_sdk.clients.metaApi.metatraderAccount_client import (
+#     NewMetatraderAccountDto,
+# )
 
 source_map = {"default": "Default", "mt4_file": "MT4 File", "mt4_api": "MT4 API"}
+
+OTHER_COLUMNS_TYPE_MAPPING = {
+    "col_p": "object",
+    "col_o": "float",
+    "col_c": "float",
+    "col_rr": "float",
+    "col_sl": "float",
+    "col_tp": "float",
+    "col_t": "object",
+    "col_d": "object",
+}
 
 
 def get_documents():
     """
     Retrieves All Documents
     """
-    documents = []
+
+    pipeline = [
+        {
+            "$lookup": {
+                "from": Setup._get_collection_name(),
+                "localField": "_id",
+                "foreignField": "documentId",
+                "as": "setups",
+            }
+        },
+        {
+            "$lookup": {
+                "from": Template._get_collection_name(),
+                "localField": "template",
+                "foreignField": "_id",
+                "as": "template",
+            }
+        },
+        {
+            "$project": {
+                "_id": 0,
+                "id": {"$toString": "$_id"},
+                "name": 1,
+                "source": 1,
+                "template": {
+                    "$let": {
+                        "vars": {"firstTemplate": {"$arrayElemAt": ["$template", 0]}},
+                        "in": {
+                            "name": "$$firstTemplate.name",
+                            "id": {"$toString": "$$firstTemplate._id"},
+                        },
+                    }
+                },
+                "date": {
+                    "$dateToString": {
+                        "format": "%Y-%m-%dT%H:%M:%S.%LZ",
+                        "date": {"$toDate": "$date_created"},
+                    }
+                },
+                "setups": {
+                    "$map": {
+                        "input": "$setups",
+                        "as": "setup",
+                        "in": {
+                            "id": {"$toString": "$$setup._id"},
+                            "name": "$$setup.name",
+                            "isDefault": "$$setup.default",
+                            "date": {
+                                "$dateToString": {
+                                    "format": "%Y-%m-%dT%H:%M:%S.%LZ",
+                                    "date": {"$toDate": "$$setup.date_created"},
+                                }
+                            },
+                        },
+                    }
+                },
+            }
+        },
+    ]
+
     id = get_jwt_identity()
     user = User.objects(id=id["$oid"]).get()
-    files = Document.objects(author=user)
-    for file in files:
-        single_file = file.with_children()
-        single_file["setups"] = get_children(single_file["id"])
-        documents.append(single_file)
-    response = jsonify(documents)
-    return response
+    documents = Document.objects(author=user).aggregate(pipeline)
+    documents = json.loads(json_util.dumps(documents))
+    return jsonify(documents)
 
 
 def get_document(file_id):
@@ -81,7 +150,7 @@ def create_document():
     columns = request.json.get("fields", None)
     other = request.json.get("checkbox", None)
 
-    # # check if file exists
+    # check if file exists
     is_file_exists = Document.objects(name=name, author=user)
     if len(is_file_exists) > 0:
         return jsonify({"msg": "This file already exists", "success": False})
@@ -100,23 +169,27 @@ def create_document():
 
     for column, is_add in other.items():
         if is_add:
-            df_columns[column] = pd.Series(dtype="object")
+            df_columns[column] = pd.Series(
+                dtype=OTHER_COLUMNS_TYPE_MAPPING.get(column, "object")
+            )
 
     df = pd.DataFrame(df_columns)
 
     # df = _add_required_columns(df) # see what happens if this is added
-    df = from_df_to_db(df, add_index=True)
+    data = from_df_to_db(df, add_index=True)
+    state = {"data": data, "fields": df.dtypes.apply(lambda x: x.name).to_dict()}
+
     # get default tempalte
     default_template = Template.objects(name="Default").get()
 
     # save the file to the DB
     document = Document(
-        name=name, author=user, state=df, source="Manual", template=default_template
+        name=name, author=user, state=state, source="Manual", template=default_template
     )
     document.save()
     # save the default setup to the DB
     setup = Setup(
-        name="Default", author=user, documentId=document, default=True, state=df
+        name="Default", author=user, documentId=document, default=True, state=state
     )
     setup.save()
     return jsonify({"msg": "Document successfully uploaded", "success": True})
@@ -131,7 +204,7 @@ def get_document_columns(file_id):
     file = Document.objects(id=file_id, author=user).get()
     df = from_db_to_df(file.state)
     columns = []
-    data_columns = file.state["fields"] if df.empty else df.dtypes
+    data_columns = file.state["fields"]
 
     # check if DataFrame is emtpy. If it is then get data from elsewhere (create utils function).
     for name, col_type in data_columns.items():
@@ -288,19 +361,25 @@ def clone_document(file_id):
         new_name = original + " Copy_" + str(copy_counter)
         is_file_exists = Document.objects(name=new_name)
 
-    new_df = from_df_to_db(from_db_to_df(file.state), add_index=True)
+    new_df = from_db_to_df(file.state)
+    new_data = from_df_to_db(new_df, add_index=True)
+    new_state = {
+        "data": new_data,
+        "fields": new_df.dtypes.apply(lambda x: x.name).to_dict(),
+    }
+
     # save the copy to the DB
-    document = Document(name=new_name, author=user, state=new_df, source=file.source)
+    document = Document(name=new_name, author=user, state=new_state, source=file.source)
     document.save()
     # save the default setup to the DB
     setup = Setup(
-        name="Default", author=user, documentId=document, default=True, state=new_df
+        name="Default", author=user, documentId=document, default=True, state=new_state
     )
     setup.save()
     return jsonify({"msg": "Document successfully copied", "success": True})
 
 
-def update_document(file_id):
+def put_document_row(file_id):
     """
     Updates a Document by either: add, update or delete a given row
 
@@ -309,8 +388,9 @@ def update_document(file_id):
     method = request.json.get("method", None)
     data = request.json.get("data", None)
 
-    file = Document.objects(id=file_id).get()
+    data = validation_pipeline(data)
 
+    document = Document.objects(id=file_id).get()
     if method == "add":
         # create index for new row
         index = uuid.uuid4().hex
@@ -343,15 +423,18 @@ def update_document(file_id):
 
     template_type = None
 
-    if file.template:
-        template_type = file.template.name
+    if document.template:
+        template_type = document.template.name
 
     if template_type == "PPT":
-        update_mappings_to_template(file, index, data, method)
+        update_mappings_to_template(document, index, data, method)
 
     try:
-        update_setups(file.id)
+        document = Document.objects(id=file_id).first()
+        document_df = from_db_to_df(document.state)
+        update_setups(document.id, document_df)
     except Exception as err:
+        print("Something went wrong", err)
         return jsonify({"msg": "Something went wrong. Try again!", "success": False})
 
     return jsonify({"msg": "Document updated correctly!", "success": True})
@@ -382,78 +465,79 @@ async def create_meta_account(account: str, password: str, server: str):
     """
 
     token = os.getenv("METAAPI_TOKEN")
-    api = MetaApi(token)
-    print(token, api)
-    try:
-        new_account = NewMetatraderAccountDto(
-            magic=123456,
-            login=account,
-            name=f"{account}+{server}",
-            password=password,
-            server=server,
-            platform="mt4",
-            type="cloud-g1",
-            keywords=[server],
-        )
+    return {"success": False}
+    # api = MetaApi(token)
+    # print(token, api)
+    # try:
+    #     new_account = NewMetatraderAccountDto(
+    #         magic=123456,
+    #         login=account,
+    #         name=f"{account}+{server}",
+    #         password=password,
+    #         server=server,
+    #         platform="mt4",
+    #         type="cloud-g1",
+    #         keywords=[server],
+    #     )
 
-        # alternatively one could also connect through account_id
-        account = await api.metatrader_account_api.create_account(new_account)
+    #     # alternatively one could also connect through account_id
+    #     account = await api.metatrader_account_api.create_account(new_account)
 
-        initial_state = account.state
-        deployed_states = ["DEPLOYING", "DEPLOYED"]
+    #     initial_state = account.state
+    #     deployed_states = ["DEPLOYING", "DEPLOYED"]
 
-        if initial_state not in deployed_states:
-            #  wait until account is deployed and connected to broker
-            await account.deploy()
+    #     if initial_state not in deployed_states:
+    #         #  wait until account is deployed and connected to broker
+    #         await account.deploy()
 
-        print(
-            "Waiting for API server to connect to broker (may take couple of minutes)"
-        )
-        await account.wait_connected()
+    #     print(
+    #         "Waiting for API server to connect to broker (may take couple of minutes)"
+    #     )
+    #     await account.wait_connected()
 
-        # connect to MetaApi API
-        connection = account.get_rpc_connection()
-        await connection.connect()
+    #     # connect to MetaApi API
+    #     connection = account.get_rpc_connection()
+    #     await connection.connect()
 
-        # TODO: this step break the code
-        # wait until terminal state synchronized to the local state
-        # print('Waiting for SDK to synchronize to terminal state (may take some time depending on your history size)')
-        # await connection.wait_synchronized()
+    #     # TODO: this step break the code
+    #     # wait until terminal state synchronized to the local state
+    #     # print('Waiting for SDK to synchronize to terminal state (may take some time depending on your history size)')
+    #     # await connection.wait_synchronized()
 
-        # invoke RPC API (replace ticket numbers with actual ticket numbers which exist in your MT account)
-        # get account deals for the last 10 years
-        days = 365 * 10
-        trade_history = await connection.get_deals_by_time_range(
-            datetime.utcnow() - timedelta(days=days), datetime.utcnow()
-        )
+    #     # invoke RPC API (replace ticket numbers with actual ticket numbers which exist in your MT account)
+    #     # get account deals for the last 10 years
+    #     days = 365 * 10
+    #     trade_history = await connection.get_deals_by_time_range(
+    #         datetime.utcnow() - timedelta(days=days), datetime.utcnow()
+    #     )
 
-        # close connnection and remove account
-        await connection.close()
+    #     # close connnection and remove account
+    #     await connection.close()
 
-        # TODO: I could also delete account here
+    #     # TODO: I could also delete account here
 
-        return {
-            "deals": trade_history["deals"],
-            "account_id": account.id,
-            "success": True,
-        }
-    except Exception as err:
-        if (
-            str(err)
-            == "Free subscription plan allows you to create no more than 2 trading accounts for personal use free of charge"
-        ):
-            try:
-                all_accounts = await api.metatrader_account_api.get_accounts()
-                account_to_delete = all_accounts[0]
-                print(account_to_delete)
+    #     return {
+    #         "deals": trade_history["deals"],
+    #         "account_id": account.id,
+    #         "success": True,
+    #     }
+    # except Exception as err:
+    #     if (
+    #         str(err)
+    #         == "Free subscription plan allows you to create no more than 2 trading accounts for personal use free of charge"
+    #     ):
+    #         try:
+    #             all_accounts = await api.metatrader_account_api.get_accounts()
+    #             account_to_delete = all_accounts[0]
+    #             print(account_to_delete)
 
-                await account_to_delete.remove()
-                await account_to_delete.wait_removed()
-                return await create_meta_account(account, password, server)
-            except Exception as err:
-                return {"success": False}
+    #             await account_to_delete.remove()
+    #             await account_to_delete.wait_removed()
+    #             return await create_meta_account(account, password, server)
+    #         except Exception as err:
+    #             return {"success": False}
 
-        return {"success": False}
+    #     return {"success": False}
 
 
 async def fetch_metatrader():

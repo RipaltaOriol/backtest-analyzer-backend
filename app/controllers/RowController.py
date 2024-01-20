@@ -1,9 +1,9 @@
+from app.controllers.utils import parse_mappings, row_to_ppt_template
 from app.models.Document import Document
+from app.models.PPTTemplate import EntryPosition, PPTTemplate, TakeProfit
 from app.models.Setup import Setup
-from flask import jsonify
 from bson import ObjectId
-from app.models.PPTTemplate import PPTTemplate, TakeProfit, EntryPosition
-from app.controllers.utils import row_to_ppt_template, parse_mappings
+from flask import jsonify
 
 
 def update_ppt_row(document, row_id, row):
@@ -28,7 +28,7 @@ def update_ppt_row(document, row_id, row):
         return jsonify({"msg": "Row updated correctly!", "success": True})
 
     except Exception as err:
-        print("Somethign went wrong", err)
+        print("Something went wrong", err)
         return jsonify({"msg": "Something went wrong.", "success": False})
 
 
@@ -84,7 +84,11 @@ def update_mappings_to_template(document, id, row, method):
     """
     Update mapptings from a row to a template.
     """
-    print(method)
+    # TODO:
+    # problem with this huge!
+    # additioanlly I should make a transaction and only enter if all enter. Otherwise this creates weird write problems
+    # also deal with broken message in the frontend (attempt to break it by setting a wrong data type on insertion)
+    # this ticket should probably be part of data validation (big one xd)
 
     if method == "delete":
         PPTTemplate.objects(row_id=id, document=document).delete()
@@ -97,7 +101,7 @@ def update_mappings_to_template(document, id, row, method):
             author=document.author,
             document=document,
             row_id=id,
-            take_profit=[TakeProfit(take_profit_number=0, take_profit=0)],
+            take_profit=[TakeProfit(take_profit_number=0)],
             positions=[
                 EntryPosition(
                     position_number=0,

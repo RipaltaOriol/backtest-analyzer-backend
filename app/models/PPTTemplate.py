@@ -2,8 +2,8 @@ from enum import Enum
 
 from app.models.Document import Document
 from app.models.Setup import Setup
-from bson.json_util import dumps
 from app.models.User import User
+from bson.json_util import dumps
 from mongoengine.document import DynamicDocument, EmbeddedDocument
 from mongoengine.fields import (
     BooleanField,
@@ -62,19 +62,18 @@ class EntryPosition(EmbeddedDocument):
 
 class TakeProfit(EmbeddedDocument):
     take_profit_number = IntField(required=True)
-    take_profit = FloatField(required=True)
+    take_profit = FloatField()
 
 
 class Event(EmbeddedDocument):
     event_date = DateTimeField(required=True)
-    monday = StringField(required=True)
-    tuesday = StringField(required=True)
-    wednesday = StringField(required=True)
-    thursday = StringField(required=True)
-    friday = StringField(required=True)
+    monday = StringField(required=True, default="")
+    tuesday = StringField(required=True, default="")
+    wednesday = StringField(required=True, default="")
+    thursday = StringField(required=True, default="")
+    friday = StringField(required=True, default="")
 
 
-# TODO: Investigate if you can modify a document
 class PPTTemplate(DynamicDocument):
     author = ReferenceField(User, reverse_delete_rule="CASCADE", required=True)
     document = ReferenceField(Document, required=True)
@@ -90,7 +89,7 @@ class PPTTemplate(DynamicDocument):
     quote_fundamental = EnumField(CurrencyReading)
     reason = StringField()
 
-    positions = ListField(EmbeddedDocumentField(EntryPosition))
+    positions = ListField(EmbeddedDocumentField(EntryPosition), default=list)
     stop_loss = FloatField()
     take_profit = ListField(EmbeddedDocumentField(TakeProfit))
 
@@ -141,14 +140,6 @@ class PPTTemplate(DynamicDocument):
 
     post_trade_screenshot = StringField()
     post_trade_comment = StringField()
-
-    def to_json(self):
-        ppt_template = self.to_mongo()
-
-        if self.date_executed:
-            ppt_template["date_executed"] = self.date_executed.isoformat()
-
-        return dumps(ppt_template)
 
     meta = {
         "collection": "ppttemplate",

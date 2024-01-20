@@ -1,5 +1,6 @@
 import json
 import os
+from datetime import datetime
 from io import StringIO
 
 import numpy as np
@@ -18,6 +19,7 @@ from flask.wrappers import Response
 
 
 def apply_filter(df, column, operation, value):
+    # NOTE: this is replicated. Find the other function and remove one.
     if operation == "in" or operation == "nin":
         if df.dtypes[column] == "bool" and len(value) == 1:
             # convert string 'true' or 'false' to bool
@@ -31,6 +33,12 @@ def apply_filter(df, column, operation, value):
                 df = df[df[column].isin(value)]
             elif operation == "nin":
                 df = df[-df[column].isin(value)]
+
+    elif operation == "date":
+        date_from = datetime.strptime(value[0], "%m/%d/%Y").strftime("%Y-%m-%d")
+        date_to = datetime.strptime(value[1], "%m/%d/%Y").strftime("%Y-%m-%d")
+        df = df.loc[(df[column] >= date_from) & (df[column] <= date_to)]
+
     else:
         # update the value so that it only gets the first element
         value = value[0]

@@ -61,7 +61,12 @@ get_ppt_template_row = [
                                 "format": "%Y-%m-%dT%H:%M:%S.%LZ",
                                 "date": "$$event_risk_date.event_date",
                             }
-                        }
+                        },
+                        "monday": "$$event_risk_date.monday",
+                        "tuesday": "$$event_risk_date.tuesday",
+                        "wednesday": "$$event_risk_date.wednesday",
+                        "thursday": "$$event_risk_date.thursday",
+                        "friday": "$$event_risk_date.friday",
                     },
                 }
             },

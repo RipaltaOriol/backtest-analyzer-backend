@@ -434,6 +434,7 @@ def put_document_row(file_id):
         document_df = from_db_to_df(document.state)
         update_setups(document.id, document_df)
     except Exception as err:
+        print("Something went wrong", err)
         return jsonify({"msg": "Something went wrong. Try again!", "success": False})
 
     return jsonify({"msg": "Document updated correctly!", "success": True})

@@ -28,7 +28,7 @@ def update_ppt_row(document, row_id, row):
         return jsonify({"msg": "Row updated correctly!", "success": True})
 
     except Exception as err:
-        print("Somethign went wrong", err)
+        print("Something went wrong", err)
         return jsonify({"msg": "Something went wrong.", "success": False})
 
 
@@ -101,7 +101,7 @@ def update_mappings_to_template(document, id, row, method):
             author=document.author,
             document=document,
             row_id=id,
-            take_profit=[TakeProfit(take_profit_number=0, take_profit=0)],
+            take_profit=[TakeProfit(take_profit_number=0)],
             positions=[
                 EntryPosition(
                     position_number=0,

@@ -62,7 +62,7 @@ class EntryPosition(EmbeddedDocument):
 
 class TakeProfit(EmbeddedDocument):
     take_profit_number = IntField(required=True)
-    take_profit = FloatField(required=True)
+    take_profit = FloatField()
 
 
 class Event(EmbeddedDocument):

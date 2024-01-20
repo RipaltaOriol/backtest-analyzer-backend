@@ -130,11 +130,11 @@ def parse_mappings(trade, template_k):
     # TODO: potentially assign fallbacks to the rest of cases
     # case for positions
     if template_k in TEMPLATE_PPT_POSITIONS:
-        return trade["positions"][0][template_k]
+        return trade["positions"][0].get(template_k, None)
 
     # case for take profit
     elif template_k == TEMPLATE_PPT_TAKE_PROFIT:
-        return trade["take_profit"][0][template_k]
+        return trade["take_profit"][0].get(template_k, None)
 
     else:
         return trade.get(template_k, None)
@@ -155,7 +155,7 @@ def row_to_ppt_template(mappings, template, row):
 
             # case for take profit
             elif template_k == TEMPLATE_PPT_TAKE_PROFIT:
-                template["take_profit"][0][template_k] = value
+                template["take_profit"][0][template_k] = value if value else None
 
             else:
                 template[template_k] = value
@@ -222,6 +222,10 @@ def validation_pipeline(data):
             else:
                 data[column] = None
         if re.match(r"col_v_", column):
+            # check if value is present
+            if not data[column]:
+                data[column] = None
+        if "col_sl" == column:
             # check if value is present
             if not data[column]:
                 data[column] = None

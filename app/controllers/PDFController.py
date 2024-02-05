@@ -1,9 +1,10 @@
+import io
 import logging
 import re
 from datetime import datetime
 from io import BytesIO
 from typing import List, Tuple
-import io
+
 import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
@@ -197,89 +198,101 @@ def render_toc(pdf, outline):
 # TODO: prevent the pdf to be saved locally
 def get_file(setup_id):
 
-    # get setup
-    setup = Setup.objects(id=setup_id).get()
+    try:
+        # get setup
+        setup = Setup.objects(id=setup_id).get()
 
-    # create pdf & set font
-    pdf = PDF(orientation="P", unit="mm", format="A4")
-    pdf.set_font("Arial", size=12)
+        # create pdf & set font
+        pdf = PDF(orientation="P", unit="mm", format="A4")
+        pdf.set_font("Arial", size=12)
 
-    pdf.add_page()
-    title = f"{setup.documentId.name}: {setup.name}"
+        pdf.add_page()
+        title = f"{setup.documentId.name}: {setup.name}"
 
-    pdf.title_and_date(title)
-    # pdf.insert_toc_placeholder(render_toc) # renders table of contents
-    pdf.head2("Notes & Filters")
-    pdf.generate_notes_and_filters(setup.notes, setup.filters)
+        pdf.title_and_date(title)
+        # pdf.insert_toc_placeholder(render_toc) # renders table of contents
+        pdf.head2("Notes & Filters")
+        pdf.generate_notes_and_filters(setup.notes, setup.filters)
 
-    pdf.head1("Trades Table")
-    df = from_db_to_df(setup.state)
+        pdf.head1("Trades Table")
+        df = from_db_to_df(setup.state)
 
-    # drop table columns
-    df_drop_columns = [col for col in df.columns if col.startswith("col_m_")] + [
-        "note",
-        "imgs",
-    ]
+        # drop table columns
+        df_drop_columns = [col for col in df.columns if col.startswith("col_m_")] + [
+            "note",
+            "imgs",
+        ]
 
-    table_df = df.copy()
+        # TODO: not sure why I do copy and then drop when I could just assign drop to the varialbe without inplace
+        table_df = df.copy()
 
-    table_df.drop(columns=df_drop_columns, inplace=True)
+        table_df.drop(columns=df_drop_columns, inplace=True, errors="ignore")
 
-    # stringify dates
-    date_columns = [
-        column for column in table_df.columns if re.match(r"col_d_", column)
-    ]
-    result_names = [column for column in df.columns if re.match(r"col_[vpr]_", column)]
-    for column in date_columns:
-        table_df[column] = table_df[column].dt.strftime("%d/%m/%y")
+        # stringify dates
+        date_columns = [
+            column for column in table_df.columns if re.match(r"col_d_", column)
+        ]
+        result_names = [
+            column for column in df.columns if re.match(r"col_[vpr]_", column)
+        ]
+        for column in date_columns:
+            table_df[column] = table_df[column].dt.strftime("%d/%m/%y")
 
-    # transform pair to upper class
-    if PAIR_COLUMN in df.columns:
-        table_df[PAIR_COLUMN] = df[PAIR_COLUMN].str.upper()
+        # transform pair to upper class
+        if PAIR_COLUMN in df.columns:
+            table_df[PAIR_COLUMN] = df[PAIR_COLUMN].str.upper()
 
-    # truncates float
-    truncate_columns = list(table_df.select_dtypes(include=["float64"]).columns)
-    for column in truncate_columns:
-        if column in result_names:
-            table_df[column] = table_df[column].apply(lambda x: truncate(x, 2))
-        else:
-            table_df[column] = table_df[column].apply(lambda x: truncate(x, 5))
+        # truncates float
+        truncate_columns = list(table_df.select_dtypes(include=["float64"]).columns)
+        for column in truncate_columns:
+            if column in result_names:
+                table_df[column] = table_df[column].apply(lambda x: truncate(x, 2))
+            else:
+                table_df[column] = table_df[column].apply(lambda x: truncate(x, 5))
 
-    df_rename_columns = {col: parse_column_name(col) for col in table_df.columns}
-    reorder_columsn = (
-        ["#", "col_p", "col_o", "col_sl", "col_tp"] + date_columns + result_names
-    )
-    table_df = table_df.reindex(reorder_columsn, axis=1).dropna(how="all", axis=1)
-    table_df = table_df.rename(columns=df_rename_columns)
+        df_rename_columns = {col: parse_column_name(col) for col in table_df.columns}
+        reorder_columsn = (
+            ["#", "col_p", "col_o", "col_sl", "col_tp"] + date_columns + result_names
+        )
+        table_df = table_df.reindex(reorder_columsn, axis=1).dropna(how="all", axis=1)
+        table_df = table_df.rename(columns=df_rename_columns)
 
-    table_df = table_df.applymap(str)
+        table_df = table_df.applymap(str)
 
-    pdf.generate_trades_table(table_df)
+        pdf.generate_trades_table(table_df)
 
-    pdf.conditional_add_page()
+        pdf.conditional_add_page()
 
-    pdf.head1("Equity Curve")
-    generate_equity_curve(df, result_names, pdf)
-    pdf.conditional_add_page()
+        pdf.head1("Equity Curve")
+        generate_equity_curve(df, result_names, pdf)
+        pdf.conditional_add_page()
 
-    pdf.head1("Result Distribution")
-    generate_result_distribution(df, result_names, pdf)
-    pdf.conditional_add_page()
+        pdf.head1("Result Distribution")
+        generate_result_distribution(df, result_names, pdf)
+        pdf.conditional_add_page()
 
-    pdf.head1("Trades Breakdown")
-    metric_columns = [column for column in df.columns if re.match(r"col_m_", column)]
-    trades = setup.state.get("data").values()
-    for i, trade in enumerate(trades):
-        is_add_page = False if i == len(trades) - 1 else True
-        pdf.trade_breakdown(trade, result_names, metric_columns, add_page=is_add_page)
+        pdf.head1("Trades Breakdown")
+        metric_columns = [
+            column for column in df.columns if re.match(r"col_m_", column)
+        ]
+        trades = setup.state.get("data").values()
+        for i, trade in enumerate(trades):
+            is_add_page = False if i == len(trades) - 1 else True
+            pdf.trade_breakdown(
+                trade, result_names, metric_columns, add_page=is_add_page
+            )
 
-    stream = io.BytesIO(pdf.output(dest="S"))
-    return send_file(
-        stream,
-        mimetype="application/pdf",
-        download_name=f"{title}.pdf",
-        as_attachment=False,
-    )
+        stream = io.BytesIO(pdf.output(dest="S"))
+        return send_file(
+            stream,
+            mimetype="application/pdf",
+            download_name=f"{title}.pdf",
+            as_attachment=False,
+        )
+
+    except:
+        # TODO: handle exception
+        print("Something went wrong")
 
     # response = make_response(pdf.output(dest='S').encode('latin-1'))
     # response.headers.set('Content-Disposition', 'attachment', filename=title + '.pdf')

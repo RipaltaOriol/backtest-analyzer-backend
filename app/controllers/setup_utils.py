@@ -1,6 +1,6 @@
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from io import StringIO
 
 import numpy as np
@@ -36,8 +36,9 @@ def apply_filter(df, column, operation, value):
 
     elif operation == "date":
         date_from = datetime.strptime(value[0], "%m/%d/%Y").strftime("%Y-%m-%d")
-        date_to = datetime.strptime(value[1], "%m/%d/%Y").strftime("%Y-%m-%d")
-        df = df.loc[(df[column] >= date_from) & (df[column] <= date_to)]
+        date_to = datetime.strptime(value[1], "%m/%d/%Y") + timedelta(days=1)
+        date_to = date_to.strftime("%Y-%m-%d")
+        df = df.loc[(df[column] >= date_from) & (df[column] < date_to)]
 
     else:
         # update the value so that it only gets the first element

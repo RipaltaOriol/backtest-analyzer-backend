@@ -495,9 +495,12 @@ def update_setups(document_id, document_df: pd.DataFrame):
     df = document_df
     setups = Setup.objects(documentId=document_id)
     for setup in setups:
+        filtered_df = df
         for filter in setup.filters:
-            df = apply_filter(df, filter.column, filter.operation, filter.value)
-        data = from_df_to_db(df)
+            filtered_df = apply_filter(
+                filtered_df, filter.column, filter.operation, filter.value
+            )
+        data = from_df_to_db(filtered_df)
         setup.modify(__raw__={"$set": {"state.data": data}})
 
 
@@ -553,9 +556,18 @@ def get_daily_distribution(setup_id):
     for col in result_columns:
         weekday_mean = {}
         for day in weekdays:
-            weekday_mean[day] = (
-                round(week_df.loc[day, col], 3) if day in week_df.index else 0
-            )
+
+            mean = 0
+
+            if day in week_df.index:
+                if np.isnan(week_df.loc[day, col]):
+                    mean = None
+                else:
+                    mean = round(week_df.loc[day, col], 3)
+            else:
+                mean = 0
+
+            weekday_mean[day] = mean
             result_column = parse_column_name(col)
         response[result_column] = weekday_mean
     return jsonify({"success": True, "data": response})
@@ -642,12 +654,10 @@ def get_bubble_results(setup_id):
     df.replace({np.nan: None}, inplace=True)
 
     data = []
-
     metric_list = [
         col
-        for col in df.columns
-        if col.startswith("col_m_")
-        and (df.dtypes[col] == "int64" or df.dtypes[col] == "float64")
+        for col, dtype in setup.state["fields"].items()
+        if col.startswith("col_m_") and (dtype == "int64" or dtype == "float64")
     ]
     result_columns = [
         column for column in df.columns if re.match(r"col_[vpr]_", column)

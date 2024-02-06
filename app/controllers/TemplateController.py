@@ -125,5 +125,10 @@ def get_template_mapping(document_id):
         "result": [col for col in columns if re.match(r"col_[vpr]_", col)],
         "dates": [col for col in columns if re.match(r"col_d_", col)],
         "other": [col for col in columns if re.match(r"col_m_", col)],
+        # TODO: integrate the following types
+        # order type
+        # results (win, lose, etc)
+        # direction ()
+        # notes ()
     }
     return jsonify(response)

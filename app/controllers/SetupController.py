@@ -10,9 +10,9 @@ import pandas as pd
 from app import app
 from app.controllers.db_pipelines.template_pipelines import get_ppt_template_row
 from app.controllers.ErrorController import handle_403
+from app.controllers.FilterController import apply_filter, get_filter_options
 from app.controllers.GraphsController import get_bar, get_line, get_pie, get_scatter
 from app.controllers.RowController import update_default_row, update_ppt_row
-from app.controllers.setup_utils import apply_filter
 from app.controllers.utils import (
     from_db_to_df,
     from_df_to_db,
@@ -439,53 +439,6 @@ def get_graphs(setup_id):
     if type == "line":
         return get_line(data, result_columns, current_metric)
     return "Bad"
-
-
-def get_filter_options(doucment_id):
-    """
-    Gets Setup Filter Options
-    """
-    document = Document.objects(id=doucment_id).get()
-
-    data = from_db_to_df(document.state)
-    data.replace({np.nan: None}, inplace=True)
-
-    map_types = data.dtypes
-    options = []
-    for column in data.columns:
-        if column.startswith("col_m_"):
-            option = {"id": column, "name": column[6:]}
-            if map_types[column] == "float64" or map_types[column] == "int64":
-                option.update(type="number")
-            else:
-                option.update(type="string")
-                option.update(values=list(data[column].dropna().unique()))
-            options.append(option)
-        if column.startswith("col_p"):
-            option = {
-                "id": column,
-                "name": "Pair",
-                "type": "string",
-                "values": list(data[column].dropna().unique()),
-            }
-            options.append(option)
-        if column.startswith("col_rr"):
-            option = {
-                "id": column,
-                "name": "Risk Reward",
-                "type": "number",
-                "values": list(data[column].dropna().unique()),
-            }
-            options.append(option)
-        if column.startswith("col_d_"):
-            option = {
-                "id": column,
-                "name": column[6:],
-                "type": "date",
-            }
-            options.append(option)
-
-    return options
 
 
 def update_setups(document_id, document_df: pd.DataFrame):

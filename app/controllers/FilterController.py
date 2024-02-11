@@ -1,13 +1,12 @@
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from io import StringIO
 
 import numpy as np
 import pandas as pd
 from app import app
 from app.controllers.ErrorController import handle_403
-from app.controllers.SetupController import get_filter_options
 from app.controllers.utils import from_db_to_df, from_df_to_db, retrieve_filter_options
 from app.models.Document import Document
 from app.models.Filter import Filter
@@ -47,8 +46,9 @@ def apply_filter(df, column, operation, value):
 
     elif operation == "date":
         date_from = datetime.strptime(value[0], "%m/%d/%Y").strftime("%Y-%m-%d")
-        date_to = datetime.strptime(value[1], "%m/%d/%Y").strftime("%Y-%m-%d")
-        df = df.loc[(df[column] >= date_from) & (df[column] <= date_to)]
+        date_to = datetime.strptime(value[1], "%m/%d/%Y") + timedelta(days=1)
+        date_to = date_to.strftime("%Y-%m-%d")
+        df = df.loc[(df[column] >= date_from) & (df[column] < date_to)]
 
     else:
         # update the value so that it only gets the first element
@@ -63,6 +63,53 @@ def apply_filter(df, column, operation, value):
             df = df[df[column] != value]
 
     return df
+
+
+def get_filter_options(doucment_id):
+    """
+    Gets Setup Filter Options
+    """
+    document = Document.objects(id=doucment_id).get()
+
+    data = from_db_to_df(document.state)
+    data.replace({np.nan: None}, inplace=True)
+
+    map_types = data.dtypes
+    options = []
+    for column in data.columns:
+        if column.startswith("col_m_"):
+            option = {"id": column, "name": column[6:]}
+            if map_types[column] == "float64" or map_types[column] == "int64":
+                option.update(type="number")
+            else:
+                option.update(type="string")
+                option.update(values=list(data[column].dropna().unique()))
+            options.append(option)
+        if column.startswith("col_p"):
+            option = {
+                "id": column,
+                "name": "Pair",
+                "type": "string",
+                "values": list(data[column].dropna().unique()),
+            }
+            options.append(option)
+        if column.startswith("col_rr"):
+            option = {
+                "id": column,
+                "name": "Risk Reward",
+                "type": "number",
+                "values": list(data[column].dropna().unique()),
+            }
+            options.append(option)
+        if column.startswith("col_d_"):
+            option = {
+                "id": column,
+                "name": column[6:],
+                "type": "date",
+            }
+            options.append(option)
+
+    return options
 
 
 def get_filter_name(column, operation, value):

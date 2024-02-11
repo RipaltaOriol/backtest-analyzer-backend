@@ -26,7 +26,7 @@ def upload_default(file):
             df = df_column_datatype_validation(df)
         except ValueError as e:
             raise UploadError(
-                "One or more column value are miscellaneous and do not satisfy typing conditions."
+                "One or more column values are miscellaneous and do not satisfy typing conditions."
             )
 
         # add all required columns

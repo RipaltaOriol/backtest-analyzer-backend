@@ -10,9 +10,9 @@ import pandas as pd
 from app import app
 from app.controllers.db_pipelines.template_pipelines import get_ppt_template_row
 from app.controllers.ErrorController import handle_403
+from app.controllers.FilterController import apply_filter, get_filter_options
 from app.controllers.GraphsController import get_bar, get_line, get_pie, get_scatter
 from app.controllers.RowController import update_default_row, update_ppt_row
-from app.controllers.setup_utils import apply_filter
 from app.controllers.utils import (
     from_db_to_df,
     from_df_to_db,
@@ -441,53 +441,6 @@ def get_graphs(setup_id):
     return "Bad"
 
 
-def get_filter_options(doucment_id):
-    """
-    Gets Setup Filter Options
-    """
-    document = Document.objects(id=doucment_id).get()
-
-    data = from_db_to_df(document.state)
-    data.replace({np.nan: None}, inplace=True)
-
-    map_types = data.dtypes
-    options = []
-    for column in data.columns:
-        if column.startswith("col_m_"):
-            option = {"id": column, "name": column[6:]}
-            if map_types[column] == "float64" or map_types[column] == "int64":
-                option.update(type="number")
-            else:
-                option.update(type="string")
-                option.update(values=list(data[column].dropna().unique()))
-            options.append(option)
-        if column.startswith("col_p"):
-            option = {
-                "id": column,
-                "name": "Pair",
-                "type": "string",
-                "values": list(data[column].dropna().unique()),
-            }
-            options.append(option)
-        if column.startswith("col_rr"):
-            option = {
-                "id": column,
-                "name": "Risk Reward",
-                "type": "number",
-                "values": list(data[column].dropna().unique()),
-            }
-            options.append(option)
-        if column.startswith("col_d_"):
-            option = {
-                "id": column,
-                "name": column[6:],
-                "type": "date",
-            }
-            options.append(option)
-
-    return options
-
-
 def update_setups(document_id, document_df: pd.DataFrame):
     """
     Updates the setups state from parent state
@@ -495,9 +448,12 @@ def update_setups(document_id, document_df: pd.DataFrame):
     df = document_df
     setups = Setup.objects(documentId=document_id)
     for setup in setups:
+        filtered_df = df
         for filter in setup.filters:
-            df = apply_filter(df, filter.column, filter.operation, filter.value)
-        data = from_df_to_db(df)
+            filtered_df = apply_filter(
+                filtered_df, filter.column, filter.operation, filter.value
+            )
+        data = from_df_to_db(filtered_df)
         setup.modify(__raw__={"$set": {"state.data": data}})
 
 
@@ -553,9 +509,18 @@ def get_daily_distribution(setup_id):
     for col in result_columns:
         weekday_mean = {}
         for day in weekdays:
-            weekday_mean[day] = (
-                round(week_df.loc[day, col], 3) if day in week_df.index else 0
-            )
+
+            mean = 0
+
+            if day in week_df.index:
+                if np.isnan(week_df.loc[day, col]):
+                    mean = None
+                else:
+                    mean = round(week_df.loc[day, col], 3)
+            else:
+                mean = 0
+
+            weekday_mean[day] = mean
             result_column = parse_column_name(col)
         response[result_column] = weekday_mean
     return jsonify({"success": True, "data": response})
@@ -642,12 +607,10 @@ def get_bubble_results(setup_id):
     df.replace({np.nan: None}, inplace=True)
 
     data = []
-
     metric_list = [
         col
-        for col in df.columns
-        if col.startswith("col_m_")
-        and (df.dtypes[col] == "int64" or df.dtypes[col] == "float64")
+        for col, dtype in setup.state["fields"].items()
+        if col.startswith("col_m_") and (dtype == "int64" or dtype == "float64")
     ]
     result_columns = [
         column for column in df.columns if re.match(r"col_[vpr]_", column)

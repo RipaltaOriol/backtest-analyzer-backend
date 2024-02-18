@@ -193,7 +193,6 @@ def retrieve_filter_options(data: pd.DataFrame):
                 "id": column,
                 "name": "Risk Reward",
                 "type": "number",
-                "values": list(data[column].dropna().unique()),
             }
             options.append(option)
         if column.startswith("col_d_"):
@@ -201,6 +200,14 @@ def retrieve_filter_options(data: pd.DataFrame):
                 "id": column,
                 "name": column[6:],
                 "type": "date",
+            }
+            options.append(option)
+        if column == "col_d":
+            option = {
+                "id": column,
+                "name": "Direction",
+                "type": "string",
+                "values": ["Long", "Short"],
             }
             options.append(option)
     options = json.loads(json.dumps(options, cls=CustomJSONizer))

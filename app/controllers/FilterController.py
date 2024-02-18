@@ -26,6 +26,7 @@ class CustomJSONizer(json.JSONEncoder):
         )
 
 
+# TODO: this function can be improved
 def apply_filter(df, column, operation, value):
     """
     Applies a Filter to a dataframe
@@ -38,6 +39,11 @@ def apply_filter(df, column, operation, value):
                 df = df[df[column] == value_bool]
             elif operation == "nin":
                 df = df[df[column] != value_bool]
+        elif column == "col_d":
+            if operation == "in":
+                df = df[df[column].str.fullmatch("|".join(value), case=False)]
+            elif operation == "nin":
+                df = df[-df[column].str.fullmatch("|".join(value), case=False)]
         else:
             if operation == "in":
                 df = df[df[column].isin(value)]

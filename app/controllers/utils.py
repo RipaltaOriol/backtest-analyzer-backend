@@ -13,11 +13,15 @@ TEMPLATE_PPT_TAKE_PROFIT = "take_profit"
 
 class CustomJSONizer(json.JSONEncoder):
     def default(self, obj):
-        return (
-            super().encode(bool(obj))
-            if isinstance(obj, np.bool_)
-            else super().default(obj)
-        )
+        if isinstance(obj, np.integer):
+            return int(obj)
+        if isinstance(obj, np.floating):
+            return float(obj)
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        if isinstance(obj, np.bool_):
+            return bool(obj)
+        return super(CustomJSONizer, self).default(obj)
 
 
 def json_serial(obj):
@@ -193,7 +197,6 @@ def retrieve_filter_options(data: pd.DataFrame):
                 "id": column,
                 "name": "Risk Reward",
                 "type": "number",
-                "values": list(data[column].dropna().unique()),
             }
             options.append(option)
         if column.startswith("col_d_"):
@@ -201,6 +204,14 @@ def retrieve_filter_options(data: pd.DataFrame):
                 "id": column,
                 "name": column[6:],
                 "type": "date",
+            }
+            options.append(option)
+        if column == "col_d":
+            option = {
+                "id": column,
+                "name": "Direction",
+                "type": "string",
+                "values": ["Long", "Short"],
             }
             options.append(option)
     options = json.loads(json.dumps(options, cls=CustomJSONizer))

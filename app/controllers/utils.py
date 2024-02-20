@@ -234,7 +234,7 @@ def validation_pipeline(data):
                 data[column] = None
         if re.match(r"col_v_", column):
             # check if value is present
-            if not data[column]:
+            if not data[column] and data[column] != 0:
                 data[column] = None
         if "col_sl" == column:
             # check if value is present

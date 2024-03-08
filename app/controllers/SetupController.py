@@ -441,20 +441,35 @@ def get_graphs(setup_id):
     return "Bad"
 
 
-def update_setups(document_id, document_df: pd.DataFrame):
+def update_setups(
+    document_id,
+    document_df: pd.DataFrame,
+    document_fields=None,
+    wiht_fields=False,
+    remove_filters=False,
+):
     """
     Updates the setups state from parent state
     """
     df = document_df
     setups = Setup.objects(documentId=document_id)
+
     for setup in setups:
         filtered_df = df
-        for filter in setup.filters:
-            filtered_df = apply_filter(
-                filtered_df, filter.column, filter.operation, filter.value
-            )
+        if remove_filters:
+            setup.modify(__raw__={"$set": {"filters": []}})
+        else:
+            for filter in setup.filters:
+                filtered_df = apply_filter(
+                    filtered_df, filter.column, filter.operation, filter.value
+                )
         data = from_df_to_db(filtered_df)
-        setup.modify(__raw__={"$set": {"state.data": data}})
+        if wiht_fields:
+            setup.modify(
+                __raw__={"$set": {"state": {"fields": document_fields, "data": data}}}
+            )
+        else:
+            setup.modify(__raw__={"$set": {"state.data": data}})
 
 
 def get_children(document_id):

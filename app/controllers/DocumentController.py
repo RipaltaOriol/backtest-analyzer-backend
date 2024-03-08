@@ -219,6 +219,119 @@ def get_document_columns(file_id):
     return response
 
 
+def put_document_columns(account_id):
+    """
+    Updates the account columns
+    """
+    id = get_jwt_identity()
+    user = User.objects(id=id["$oid"]).get()
+
+    account = Document.objects(id=account_id, author=user).get()
+    columns = request.json
+
+    template_columns = (
+        [*account.template_mapping.values()] if account.template_mapping else []
+    )
+
+    failure_to_update = []
+
+    fields = account.state.get("fields")
+    field_names = [*fields.keys()]
+    df = from_db_to_df(account.state)
+
+    for to_delete_column in columns.pop("to_delete", []):
+        # checks column is not used in templates
+        if to_delete_column in template_columns:
+            failure_to_update.append(to_delete_column)
+            continue
+
+        df = df.drop(to_delete_column, axis=1, errors="ignore")
+        del fields[to_delete_column]
+
+    for column_name, props in columns.items():
+        action = props.get("action")
+        if action == "add":
+            # check column does not exist
+            if column_name in field_names:
+                failure_to_update.append(column_name)
+            else:
+                new_type = props.get("type", None)
+                expected_type = get_columm_expected_type(column_name, new_type)
+
+                fields[column_name] = expected_type
+                df[column_name] = None
+
+        elif action == "edit":
+            # check column does not exist and is not being used in templates
+            if column_name in template_columns or column_name not in field_names:
+                failure_to_update.append(column_name)
+                continue
+            try:
+                new_column = props.get("new_column")
+                new_type = props.get("type", None)
+
+                expected_type = get_columm_expected_type(new_column, new_type)
+
+                df[column_name] = (
+                    df[column_name]
+                    .astype(expected_type)
+                    .where(df[column_name].notnull(), None)
+                )
+                df.rename(columns={column_name: new_column}, inplace=True)
+
+                del fields[column_name]
+                fields[new_column] = expected_type
+
+            except Exception as err:
+                failure_to_update.append(column_name)
+                print("Something went wrong: ", err)
+
+    # check if account contains a result
+    if not [column for column in df.columns if re.match(r"col_[vpr]_", column)]:
+        return jsonify(
+            {"success": False, "msg": "At least one result property is required!"}
+        )
+
+    data = from_df_to_db(df)
+    account.update(__raw__={"$set": {f"state": {"fields": fields, "data": data}}})
+
+    try:
+        # TODO: not all filters have to be removed
+        update_setups(
+            account.id,
+            df,
+            document_fields=fields,
+            wiht_fields=True,
+            remove_filters=True,
+        )
+    except Exception as err:
+        print("Something went wrong: ", err)
+        return jsonify({"msg": "Something went wrong. Try again!", "success": False})
+
+    if failure_to_update:
+        parse_columns = ", ".join(
+            [parse_column_name(column) for column in failure_to_update]
+        )
+        return jsonify({"success": False, "msg": f"Fail to update: {parse_columns}"})
+
+    return jsonify(
+        {"success": True, "msg": "Account fields have been updated correctly!"}
+    )
+
+
+def get_columm_expected_type(column, type_specification=None):
+    # TODO: move this into utils
+    # TODO: potential issue here
+    if column.startswith("col_m_"):
+        return type_specification
+    elif column.startswith("col_d_"):
+        return "datetime64[ns, utc]"
+    elif column == "col_d" or column == "col_p" or column == "col_t":
+        return "object"
+    else:
+        return "float64"
+
+
 def get_document_compare(file_id):
     """
     Retrieves a Document w/ Setups (compare)

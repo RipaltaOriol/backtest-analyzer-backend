@@ -22,21 +22,20 @@ from app.controllers.utils import (
     from_db_to_df,
     from_df_to_db,
     parse_column_name,
-    parse_column_type,
     validation_pipeline,
 )
 from app.models.Document import Document
 from app.models.Setup import Setup
 from app.models.Template import Template
 from app.models.User import User
+from app.services.MT4_api import (
+    connect_account,
+    discover_server_ip,
+    get_account_history,
+)
 from bson import DBRef, ObjectId, json_util
 from flask import jsonify, request
 from flask_jwt_extended import get_jwt_identity
-
-# from metaapi_cloud_sdk import MetaApi
-# from metaapi_cloud_sdk.clients.metaApi.metatraderAccount_client import (
-#     NewMetatraderAccountDto,
-# )
 
 source_map = {"default": "Default", "mt4_file": "MT4 File", "mt4_api": "MT4 API"}
 
@@ -202,21 +201,128 @@ def get_document_columns(file_id):
     id = get_jwt_identity()
     user = User.objects(id=id["$oid"]).get()
     file = Document.objects(id=file_id, author=user).get()
-    df = from_db_to_df(file.state)
-    columns = []
-    data_columns = file.state["fields"]
+    account_columns = file.state["fields"]
 
-    # check if DataFrame is emtpy. If it is then get data from elsewhere (create utils function).
-    for name, col_type in data_columns.items():
-        columns.append(
-            {
-                "name": parse_column_name(name),
-                "type": parse_column_type(col_type),
-                "id": name,
-            }
-        )
-    response = jsonify(columns)
+    # TODO: check if DataFrame is emtpy. If it is then get data from elsewhere (create utils function).
+    account_columns = {
+        id: {"name": parse_column_name(id), "type": type, "column": id[0:6]}
+        for id, type in account_columns.items()
+    }
+
+    response = jsonify(account_columns)
     return response
+
+
+def put_document_columns(account_id):
+    """
+    Updates the account columns
+    """
+    id = get_jwt_identity()
+    user = User.objects(id=id["$oid"]).get()
+
+    account = Document.objects(id=account_id, author=user).get()
+    columns = request.json
+
+    template_columns = (
+        [*account.template_mapping.values()] if account.template_mapping else []
+    )
+
+    failure_to_update = []
+
+    fields = account.state.get("fields")
+    field_names = [*fields.keys()]
+    df = from_db_to_df(account.state)
+    for to_delete_column in columns.pop("to_delete", []):
+        # checks column is not used in templates
+        if to_delete_column in template_columns:
+            failure_to_update.append(to_delete_column)
+            continue
+
+        df = df.drop(to_delete_column, axis=1, errors="ignore")
+        del fields[to_delete_column]
+
+    for column_name, props in columns.items():
+        action = props.get("action")
+        if action == "add":
+            # check column does not exist
+            if column_name in field_names:
+                failure_to_update.append(column_name)
+            else:
+                new_type = props.get("type", None)
+                expected_type = get_columm_expected_type(column_name, new_type)
+
+                fields[column_name] = expected_type
+                df[column_name] = None
+
+        elif action == "edit":
+            # check column does not exist and is not being used in templates
+            if column_name in template_columns or column_name not in field_names:
+                failure_to_update.append(column_name)
+                continue
+            try:
+                new_column = props.get("new_column")
+                new_type = props.get("type", None)
+
+                expected_type = get_columm_expected_type(new_column, new_type)
+
+                df[column_name] = (
+                    df[column_name]
+                    .astype(expected_type)
+                    .where(df[column_name].notnull(), None)
+                )
+                df.rename(columns={column_name: new_column}, inplace=True)
+
+                del fields[column_name]
+                fields[new_column] = expected_type
+
+            except Exception as err:
+                failure_to_update.append(column_name)
+                print("Something went wrong: ", err)
+
+    # check if account contains a result
+    if not [column for column in df.columns if re.match(r"col_[vpr]_", column)]:
+        return jsonify(
+            {"success": False, "msg": "At least one result property is required!"}
+        )
+
+    data = from_df_to_db(df)
+    account.update(__raw__={"$set": {f"state": {"fields": fields, "data": data}}})
+
+    try:
+        # TODO: not all filters have to be removed
+        update_setups(
+            account.id,
+            df,
+            document_fields=fields,
+            wiht_fields=True,
+            remove_filters=True,
+        )
+    except Exception as err:
+        print("Something went wrong: ", err)
+        return jsonify({"msg": "Something went wrong. Try again!", "success": False})
+
+    if failure_to_update:
+        parse_columns = ", ".join(
+            [parse_column_name(column) for column in failure_to_update]
+        )
+        return jsonify({"success": False, "msg": f"Fail to update: {parse_columns}"})
+
+    return jsonify(
+        {"success": True, "msg": "Account fields have been updated correctly!"}
+    )
+
+
+def get_columm_expected_type(column, type_specification=None):
+    # TODO: move this into utils
+    # TODO: potential issue here
+    if column.startswith("col_m_"):
+        return type_specification
+    elif column.startswith("col_d_"):
+        return "datetime64[ns, utc]"
+    elif column == "col_d" or column == "col_p" or column == "col_t":
+        return "object"
+    else:
+        return "float64"
 
 
 def get_document_compare(file_id):
@@ -459,87 +565,6 @@ def delete_document(file_id):
         return jsonify({"msg": "Document does not exist", "success": False})
 
 
-async def create_meta_account(account: str, password: str, server: str):
-    """
-    Create a MT4 account on MetaApi
-    """
-
-    token = os.getenv("METAAPI_TOKEN")
-    return {"success": False}
-    # api = MetaApi(token)
-    # print(token, api)
-    # try:
-    #     new_account = NewMetatraderAccountDto(
-    #         magic=123456,
-    #         login=account,
-    #         name=f"{account}+{server}",
-    #         password=password,
-    #         server=server,
-    #         platform="mt4",
-    #         type="cloud-g1",
-    #         keywords=[server],
-    #     )
-
-    #     # alternatively one could also connect through account_id
-    #     account = await api.metatrader_account_api.create_account(new_account)
-
-    #     initial_state = account.state
-    #     deployed_states = ["DEPLOYING", "DEPLOYED"]
-
-    #     if initial_state not in deployed_states:
-    #         #  wait until account is deployed and connected to broker
-    #         await account.deploy()
-
-    #     print(
-    #         "Waiting for API server to connect to broker (may take couple of minutes)"
-    #     )
-    #     await account.wait_connected()
-
-    #     # connect to MetaApi API
-    #     connection = account.get_rpc_connection()
-    #     await connection.connect()
-
-    #     # TODO: this step break the code
-    #     # wait until terminal state synchronized to the local state
-    #     # print('Waiting for SDK to synchronize to terminal state (may take some time depending on your history size)')
-    #     # await connection.wait_synchronized()
-
-    #     # invoke RPC API (replace ticket numbers with actual ticket numbers which exist in your MT account)
-    #     # get account deals for the last 10 years
-    #     days = 365 * 10
-    #     trade_history = await connection.get_deals_by_time_range(
-    #         datetime.utcnow() - timedelta(days=days), datetime.utcnow()
-    #     )
-
-    #     # close connnection and remove account
-    #     await connection.close()
-
-    #     # TODO: I could also delete account here
-
-    #     return {
-    #         "deals": trade_history["deals"],
-    #         "account_id": account.id,
-    #         "success": True,
-    #     }
-    # except Exception as err:
-    #     if (
-    #         str(err)
-    #         == "Free subscription plan allows you to create no more than 2 trading accounts for personal use free of charge"
-    #     ):
-    #         try:
-    #             all_accounts = await api.metatrader_account_api.get_accounts()
-    #             account_to_delete = all_accounts[0]
-    #             print(account_to_delete)
-
-    #             await account_to_delete.remove()
-    #             await account_to_delete.wait_removed()
-    #             return await create_meta_account(account, password, server)
-    #         except Exception as err:
-    #             return {"success": False}
-
-    #     return {"success": False}
-
-
 async def fetch_metatrader():
     """
     Fetch account directly from MetaTrader. It requires account, passsword, server and platform.
@@ -551,44 +576,54 @@ async def fetch_metatrader():
     password = request.json.get("password", None)
     server = request.json.get("server", None)
 
-    # check if file exists
+    # ensure no duplicate accounts are created
     is_file_exists = Document.objects(name=f"{account}+{server}", author=user)
     if len(is_file_exists) > 0:
         return jsonify({"msg": "This file already exists", "success": False})
 
-    meta_account = await create_meta_account(account, password, server)
+    server_ips = discover_server_ip(server)
+    if server_ips.get("success"):
+        # TODO: ideally one wil ltry multiple API
+        print(server_ips.get("server_ips"))
+        ip = server_ips.get("server_ips")[0]
+        print(int(account), password, ip)
+        connection_string = connect_account(int(account), password, ip)
+        account_history = get_account_history(connection_string)
+        if account_history.get("success"):
+            print(account_history.get("account_history"))
+            state = upaload_meta_api(account_history.get("account_history"))
+            default_template = Template.objects(name="Default").get()
 
-    if meta_account["success"]:
+            # TODO: is probably better not to store this information
+            account = Document(
+                name=f"{account}+{server}",
+                author=user,
+                state=state,
+                source="MT4 API",
+                template=default_template,
+                metaapi_id=connection_string,
+                meta_account=account,
+                meta_password=password,
+                meta_server=server,
+            )
+            account.save()
 
-        df = upaload_meta_api(meta_account["deals"])
-        default_template = Template.objects(name="Default").get()
+            # create an initial setup for the account
+            setup = Setup(
+                name="Default",
+                author=user,
+                documentId=account,
+                default=True,
+                state=state,
+            )
+            setup.save()
 
-        # TODO: is probably better not to store this information
-        document = Document(
-            name=f"{account}+{server}",
-            author=user,
-            state=df,
-            source="MT4 API",
-            template=default_template,
-            metaapi_id=meta_account["account_id"],
-            meta_account=account,
-            meta_password=password,
-            meta_server=server,
-        )
-        document.save()
+            return jsonify({"msg": "Account successfully extracted!", "success": True})
 
-        # save the default setup to the DB
-        setup = Setup(
-            name="Default", author=user, documentId=document, default=True, state=df
-        )
-        setup.save()
-
-        return jsonify({"msg": "Document successfully uploaded", "success": True})
-
-    else:
-        return jsonify(
-            {"msg": "Something went wrong. Try again later.", "success": False}
-        )
+        else:
+            return jsonify(
+                {"msg": "Something went wrong. Try again later.", "success": False}
+            )
 
 
 async def refetch_document(file_id):
@@ -599,29 +634,29 @@ async def refetch_document(file_id):
     # TODO: this could be done better by only adding the new deals.
     # TODO: this could be improved by checking if account it is still active
 
-    id = get_jwt_identity()
-    user = User.objects(id=id["$oid"]).get()
-    # get credentials
-    file = Document.objects(id=file_id, author=user).get()
-    # get meta trader account
-    meta_account = await create_meta_account(
-        file.meta_account, file.meta_password, file.meta_server
-    )
+    # id = get_jwt_identity()
+    # user = User.objects(id=id["$oid"]).get()
+    # # get credentials
+    # file = Document.objects(id=file_id, author=user).get()
+    # # get meta trader account
+    # meta_account = await create_meta_account(
+    #     file.meta_account, file.meta_password, file.meta_server
+    # )
 
-    if not meta_account["success"]:
-        return jsonify(
-            {"msg": "Something went wrong. Try again later.", "success": False}
-        )
+    # if not meta_account["success"]:
+    #     return jsonify(
+    #         {"msg": "Something went wrong. Try again later.", "success": False}
+    #     )
 
-    df = upaload_meta_api(meta_account["deals"])
+    # df = upaload_meta_api(meta_account["deals"])
 
-    file.state = df
-    file.metaapi_id = meta_account["account_id"]
-    file.save()
+    # file.state = df
+    # file.metaapi_id = meta_account["account_id"]
+    # file.save()
 
-    try:
-        update_setups(file.id)
-    except Exception as err:
-        return jsonify({"msg": "Something went wrong. Try again!", "success": False})
+    # try:
+    #     update_setups(file.id)
+    # except Exception as err:
+    #     return jsonify({"msg": "Something went wrong. Try again!", "success": False})
 
     return jsonify({"msg": "Document updated correctly!", "success": True})

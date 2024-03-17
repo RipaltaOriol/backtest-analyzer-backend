@@ -28,20 +28,28 @@ def get_user_details():
     else:
         user_settings = user_settings.get()
 
-    user_templates = user_settings.get_templates()
+    templates = user_settings.get_templates()
 
-    user_template_ids = [str(template.id) for template in user_settings.templates]
+    templates = {template.get("id"): template for template in templates}
 
-    templates = Template.objects().filter(id__not__in=user_template_ids).to_json()
+    template_ids = [str(template.id) for template in user_settings.templates]
 
-    templates = json.loads(templates)
+    market_templates = Template.objects().filter(id__not__in=template_ids).to_json()
 
-    for template in templates:
+    market_templates = json.loads(market_templates)
+
+    for template in market_templates:
         template["id"] = template["_id"]["$oid"]
         template.pop("_id")
 
+    market_templates = {template.get("id"): template for template in market_templates}
+
     return jsonify(
-        {"email": user.email, "templates": user_templates, "allTemplates": templates}
+        {
+            "email": user.email,
+            "templates": templates,
+            "marketTemplates": market_templates,
+        }
     )
 
 

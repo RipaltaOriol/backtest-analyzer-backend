@@ -10,6 +10,7 @@ from app.controllers.DocumentController import (
     get_documents,
     post_document,
     put_document,
+    put_document_columns,
     put_document_row,
     refetch_document,
 )
@@ -36,15 +37,14 @@ document_bp.route("/<file_id>", methods=["DELETE"])(jwt_required()(delete_docume
 document_bp.route("/<file_id>/columns", methods=["GET"])(
     jwt_required()(get_document_columns)
 )
+document_bp.route("/<account_id>/columns", methods=["PUT"])(
+    jwt_required()(put_document_columns)
+)
 
 document_bp.route("/<file_id>/compare", methods=["GET"])(
     jwt_required()(get_document_compare)
 )
 
-# TODO: this is misplaced
-document_bp.route("/<file_id>/update", methods=["PUT"])(
-    jwt_required()(put_document_row)
-)
 document_bp.route("/<file_id>/refetch", methods=["PUT"])(
     jwt_required()(refetch_document)
 )
@@ -61,4 +61,9 @@ document_bp.route("/<document_id>/templates/<template_id>", methods=["POST"])(
 # TODO: this is misplaced
 document_bp.route("/<document_id>/templates/mapping", methods=["GET"])(
     jwt_required()(get_template_mapping)
+)
+
+# TODO: this is misplaced
+document_bp.route("/<file_id>/update", methods=["PUT"])(
+    jwt_required()(put_document_row)
 )

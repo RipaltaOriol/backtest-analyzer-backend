@@ -125,3 +125,44 @@ def update_mappings_to_template(document, id, row, method):
     template.save()
 
     return True
+
+
+def generate_template(account, trade_id: str) -> PPTTemplate:
+    return PPTTemplate(
+        author=account.author,
+        document=account,
+        row_id=trade_id,
+        take_profit=[TakeProfit(take_profit_number=0)],
+        positions=[
+            EntryPosition(
+                position_number=0,
+                order_type="Market",
+                price=0,
+                risk=0,
+                size=0,
+                risk_reward=0,
+            )
+        ],
+    )
+
+
+def delete_template(account, trade_id) -> None:
+    PPTTemplate.objects(row_id=trade_id, document=account).delete()
+
+
+def add_template(account, trade_id: str) -> None:
+    try:
+        template = generate_template(account, trade_id)
+        template.save()
+    except Exception as err:
+        print("An error occurred: ", err)
+
+
+def put_template(account, trade_id: str, trade: object) -> None:
+    # NOTE: currently this fucntion only updates the mappings
+
+    # check if template contains mappings
+    if account.template_mapping:
+        template = PPTTemplate.objects(row_id=trade_id, document=account).get()
+        template = row_to_ppt_template(account.template_mapping, template, trade)
+        template.save()

@@ -11,6 +11,36 @@ from app.controllers.validation_pipelines.upload_pipelines import (
 from flask import jsonify
 
 REQUIRED_COLUMNS = ["note", "imgs"]
+TARGET_COLUMNS = [
+    "ticket",
+    "openTime",
+    "closeTime",
+    "type",
+    "lots",
+    "symbol",
+    "openPrice",
+    "stopLoss",
+    "takeProfit",
+    "closePrice",
+    "swap",
+    "commission",
+    "profit",
+]
+COLUMNS_RENAME = {
+    "ticket": "#",
+    "openTime": "col_d_Open Time",
+    "closeTime": "col_d_Close Time",
+    "type": "col_m_Type",
+    "lots": "col_m_Size",
+    "symbol": "col_p",
+    "openPrice": "col_o",
+    "closePrice": "col_c",
+    "stopLoss": "col_sl",
+    "takeProfit": "col_tp",
+    "commission": "col_m_Commision",
+    "swap": "col_m_Swap",
+    "profit": "col_v_Profit",
+}
 
 
 def upload_default(file):
@@ -155,66 +185,40 @@ def _add_required_columns(df):
     return df
 
 
-def upaload_meta_api(data):
-    data = pd.DataFrame.from_dict(data, orient="columns")
+def upaload_meta_api(account_history: object) -> object:
+    data = pd.DataFrame.from_dict(account_history, orient="columns")
+    pd.set_option("display.max_rows", None, "display.max_columns", None)
+    data[["ticket", "symbol", "type", "swap", "profit"]]
 
-    # remove all non type DEAL_TYPE and DEAL_TYPE_SELL
     data = data.loc[
-        (data["type"] == "DEAL_TYPE_BUY") | (data["type"] == "DEAL_TYPE_SELL")
+        data["type"].isin(
+            ["Buy", "Sell", "BuyStop", "SellStop", "SellLimit", "BuyLimit"]
+        )
     ]
 
-    data_grouped = data.groupby("positionId")
-    data_grouped = data.sort_values("entryType", ascending=True).groupby("positionId")
+    # alternative code to only include executed orders
+    # data = data.loc[data['type'].isin(['Buy', 'Sell'])]
 
-    data_time = data_grouped["time"].apply(lambda x: pd.Series(x.values)).unstack()
-    data_price = data_grouped["price"].apply(lambda x: pd.Series(x.values)).unstack()
-    data_time.rename(
-        columns={0: "col_d_Open Time", 1: "col_d_Close Time"}, inplace=True
-    )
-    data_price.rename(columns={0: "col_o", 1: "col_c"}, inplace=True)
+    # filter specific columns
+    data = data[TARGET_COLUMNS]
 
-    data_clean = data.loc[data.entryType == "DEAL_ENTRY_OUT"]
-    data_clean.set_index("positionId", inplace=True)
-    df = pd.concat([data_clean, data_time, data_price], axis=1)
-    df["type"] = df["type"].apply(lambda x: "sell" if x == "DEAL_TYPE_BUY" else "buy")
-    df.drop(
-        [
-            "magic",
-            "time",
-            "entryType",
-            "price",
-            "accountCurrencyExchangeRate",
-            "orderId",
-            "platform",
-            "reason",
-            "comment",
-            "brokerComment",
-            "brokerTime",
-        ],
-        axis=1,
-        inplace=True,
+    data.loc[:, "openTime"] = pd.to_datetime(data["openTime"], utc=True)
+    data.loc[:, "closeTime"] = pd.to_datetime(data["closeTime"], utc=True)
+
+    data["col_d"] = np.where(
+        data["type"].str.startswith("Buy"),
+        "Long",
+        np.where(data["type"].str.startswith("Sell"), "Short", None),
     )
 
-    # parse dates
-    df.loc[:, "col_d_Open Time"] = pd.to_datetime(df["col_d_Open Time"], utc=True)
-    df.loc[:, "col_d_Close Time"] = pd.to_datetime(df["col_d_Close Time"], utc=True)
+    data.rename(columns=COLUMNS_RENAME, errors="raise", inplace=True)
 
-    rename_columns = {
-        "id": "#",
-        "type": "col_m_Type",
-        "volume": "col_m_Size",
-        "symbol": "col_p",
-        "stopLoss": "col_sl",
-        "takeProfit": "col_tp",
-        "commission": "col_m_Commision",
-        "swap": "col_m_Swap",
-        "profit": "col_v_Profit",
-    }
-
-    df.rename(columns=rename_columns, errors="raise", inplace=True)
+    data.set_index("#", inplace=True, drop=False)
 
     # add all required columns
-    df = _add_required_columns(df)
+    df = _add_required_columns(data)
+    # validate dataframe dtypes
+    df = df_column_datatype_validation(df)
 
     state = {
         "data": from_df_to_db(df, add_index=False),

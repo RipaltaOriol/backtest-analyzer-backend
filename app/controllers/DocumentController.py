@@ -37,7 +37,12 @@ from bson import DBRef, ObjectId, json_util
 from flask import jsonify, request
 from flask_jwt_extended import get_jwt_identity
 
-source_map = {"default": "Default", "mt4_file": "MT4 File", "mt4_api": "MT4 API"}
+source_map = {
+    "DEFAULT": "Default",
+    "MT4_FILE": "MT4 File",
+    "MT4_API": "MT4 API",
+    "MT5_API": "MT5 API",
+}
 
 OTHER_COLUMNS_TYPE_MAPPING = {
     "col_p": "object",
@@ -492,9 +497,9 @@ def post_document():
     if len(is_file_exists) > 0:
         return jsonify({"msg": "This file already exists", "success": False})
     try:
-        if file_source == "default":
+        if file_source == "DEFAULT":
             df = upload_default(file)
-        elif file_source == "mt4_file":
+        elif file_source == "MT4_FILE":
             df = upload_mt4(file)
         else:
             return jsonify(
@@ -650,20 +655,24 @@ async def fetch_metatrader():
     account = request.json.get("account", None)
     password = request.json.get("password", None)
     server = request.json.get("server", None)
+    platform = request.json.get("platform", None)
+
+    if not account and not password and not server and not platform:
+        return jsonify({"msg": "Some information is missing.", "success": False})
 
     # ensure no duplicate accounts are created
     is_file_exists = Document.objects(name=f"{account}+{server}", author=user)
     if len(is_file_exists) > 0:
         return jsonify({"msg": "This file already exists", "success": False})
 
-    server_ips = discover_server_ip(server)
+    server_ips = discover_server_ip(server, platform)
     if server_ips.get("success"):
-        # TODO: ideally one wil ltry multiple API
-        print(server_ips.get("server_ips"))
+        # TODO: ideally one wil try multiple API
         ip = server_ips.get("server_ips")[0]
-        print(int(account), password, ip)
-        connection_string = connect_account(int(account), password, ip)
-        account_history = get_account_history(connection_string)
+
+        connection_string = connect_account(int(account), password, ip, platform)
+        account_history = get_account_history(connection_string, platform)
+
         if account_history.get("success"):
             print(account_history.get("account_history"))
             state = upaload_meta_api(account_history.get("account_history"))
@@ -674,7 +683,7 @@ async def fetch_metatrader():
                 name=f"{account}+{server}",
                 author=user,
                 state=state,
-                source="MT4 API",
+                source=source_map.get(platform),
                 template=default_template,
                 metaapi_id=connection_string,
                 meta_account=account,

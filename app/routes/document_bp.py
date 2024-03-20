@@ -3,12 +3,14 @@ from app.controllers.DocumentController import (
     create_document,
     delete_document,
     fetch_metatrader,
+    get_account_settings,
     get_calendar_table,
     get_document,
     get_document_columns,
     get_document_compare,
     get_documents,
     post_document,
+    put_account_settings,
     put_document,
     put_document_columns,
     put_document_row,
@@ -33,6 +35,14 @@ document_bp.route("/<file_id>", methods=["GET"])(jwt_required()(get_document))
 document_bp.route("/<file_id>", methods=["POST"])(jwt_required()(clone_document))
 document_bp.route("/<file_id>", methods=["PUT"])(jwt_required()(put_document))
 document_bp.route("/<file_id>", methods=["DELETE"])(jwt_required()(delete_document))
+
+# Account Settings
+document_bp.route("/<account_id>/settings", methods=["GET"])(
+    jwt_required()(get_account_settings)
+)
+document_bp.route("/<account_id>/settings", methods=["PUT"])(
+    jwt_required()(put_account_settings)
+)
 
 document_bp.route("/<file_id>/columns", methods=["GET"])(
     jwt_required()(get_document_columns)

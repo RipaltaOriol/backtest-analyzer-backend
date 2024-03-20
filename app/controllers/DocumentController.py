@@ -24,7 +24,7 @@ from app.controllers.utils import (
     parse_column_name,
     validation_pipeline,
 )
-from app.models.Document import Document
+from app.models.Document import Document, TradeCondition
 from app.models.Setup import Setup
 from app.models.Template import Template
 from app.models.User import User
@@ -323,6 +323,81 @@ def get_columm_expected_type(column, type_specification=None):
         return "object"
     else:
         return "float64"
+
+
+def get_account_settings(account_id):
+    account = Document.objects(id=account_id).get()
+
+    return jsonify(
+        {
+            "name": account.name,
+            "balance": account.balance,
+            "currency": account.account_currency.value
+            if account.account_currency
+            else None,
+            "positionCondition": {
+                "column": account.open_conditions[0].column
+                if account.open_conditions
+                else None,
+                "condition": account.open_conditions[0].condition
+                if account.open_conditions
+                else None,
+                "value": account.open_conditions[0].value
+                if account.open_conditions
+                else None,
+            },
+        }
+    )
+
+
+def put_account_settings(account_id):
+    account = Document.objects(id=account_id).get()
+
+    name = request.json.get("name", account.name)
+    balance = request.json.get("balance", account.balance)
+    currency = request.json.get(
+        "currency", account.account_currency.value if account.account_currency else None
+    )
+    open_condition = request.json.get("openCondition", None)
+
+    try:
+        if open_condition:
+            open_column = open_condition.get("column", None)
+            open_operation = open_condition.get("condition", None)
+            open_value = open_condition.get("value", None)
+
+            if open_column and open_condition:
+                if (
+                    open_condition != "empty" or open_condition != "not_empty"
+                ) or open_value:
+                    # TODO: check if filter works
+                    open_trade_condition = TradeCondition(
+                        column=open_column,
+                        condition=open_operation,
+                        value=open_value,
+                    )
+                    account.modify(open_conditions=[open_trade_condition])
+
+    except Exception as e:
+        # TODO: specify
+        return jsonify(
+            {"message": "Something went wrong. Please try again.", "success": False}
+        )
+
+        # if condition is not empty then check value
+        # save ()
+
+    try:
+        # ensure balance is a number
+        balance = float(balance)
+        account.modify(name=name, balance=balance, account_currency=currency)
+        return jsonify(
+            {"message": "Account settings updated successfully!", "success": True}
+        )
+    except Exception as e:
+        return jsonify(
+            {"message": "Something went wrong. Please try again.", "success": False}
+        )
 
 
 def get_document_compare(file_id):

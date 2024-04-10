@@ -8,6 +8,7 @@ from app.controllers.SetupController import (
     get_graphics,
     get_graphs,
     get_net_results,
+    get_open_trades,
     get_setup_row,
     get_setups,
     get_statistics,
@@ -63,4 +64,9 @@ setup_bp.route("/<setup_id>/charts/cum", methods=["GET"])(
 
 setup_bp.route("/<setup_id>/calendar", methods=["GET"])(
     jwt_required()(get_calendar_table)
+)
+
+# Version Trades
+setup_bp.route("/<version_id>/open-trades", methods=["GET"])(
+    jwt_required()(get_open_trades)
 )

@@ -11,6 +11,7 @@ from io import StringIO
 import pandas as pd
 from app import app
 from app.controllers.errors import UploadError
+from app.controllers.FilterController import filter_open_trades
 from app.controllers.RowController import update_mappings_to_template
 from app.controllers.SetupController import get_children, update_setups
 from app.controllers.UploadController import (
@@ -35,6 +36,7 @@ from app.services.MT4_api import (
 )
 from bson import DBRef, ObjectId, json_util
 from flask import jsonify, request
+from flask.wrappers import Response
 from flask_jwt_extended import get_jwt_identity
 
 source_map = {
@@ -355,7 +357,18 @@ def get_account_settings(account_id):
     )
 
 
-def put_account_settings(account_id):
+def put_account_settings(account_id) -> Response:
+    """
+    Updates an account's settings based on provided JSON payload. Settings can include the account's
+    name, balance, currency, and conditions for opening trades. If an open trade condition is specified,
+    it validates and applies this condition. Then, it updates the account's general settings.
+
+    Parameters:
+    - account_id (str): Unique identifier of the account to update.
+
+    Returns:
+    - Flask.Response: JSON response indicating the outcome.
+    """
     account = Document.objects(id=account_id).get()
 
     name = request.json.get("name", account.name)
@@ -367,33 +380,42 @@ def put_account_settings(account_id):
 
     try:
         if open_condition:
+            # Extract open condition values from request
             open_column = open_condition.get("column", None)
             open_operation = open_condition.get("condition", None)
             open_value = open_condition.get("value", None)
 
-            if open_column and open_condition:
+            if open_column and open_operation:
+
                 if (
-                    open_condition != "empty" or open_condition != "not_empty"
+                    open_operation == "empty" or open_operation == "not_empty"
                 ) or open_value:
-                    # TODO: check if filter works
+                    # Ensure filter condition does not return an error
+                    df = from_db_to_df(account.state)
+                    column_type = account.state["fields"].get(open_column)
+                    filter_open_trades(
+                        df, open_column, column_type, open_operation, open_value
+                    )
+
                     open_trade_condition = TradeCondition(
                         column=open_column,
                         condition=open_operation,
                         value=open_value,
                     )
+
                     account.modify(open_conditions=[open_trade_condition])
 
-    except Exception as e:
-        # TODO: specify
+    except Exception as error:
+        # TODO: log
         return jsonify(
-            {"message": "Something went wrong. Please try again.", "success": False}
+            {
+                "message": "There was an error setting up condition for open positions. Please try again.",
+                "success": False,
+            }
         )
 
-        # if condition is not empty then check value
-        # save ()
-
     try:
-        # ensure balance is a number
+        # Validate balance is a number
         balance = float(balance)
         account.modify(name=name, balance=balance, account_currency=currency)
         return jsonify(

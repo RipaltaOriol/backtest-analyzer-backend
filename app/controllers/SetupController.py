@@ -10,7 +10,11 @@ import pandas as pd
 from app import app
 from app.controllers.db_pipelines.template_pipelines import get_ppt_template_row
 from app.controllers.ErrorController import handle_403
-from app.controllers.FilterController import apply_filter, get_filter_options
+from app.controllers.FilterController import (
+    apply_filter,
+    filter_open_trades,
+    get_filter_options,
+)
 from app.controllers.GraphsController import get_bar, get_line, get_pie, get_scatter
 from app.controllers.RowController import update_default_row, update_ppt_row
 from app.controllers.utils import (
@@ -733,3 +737,55 @@ def get_calendar_table(setup_id):
 
     response = jsonify(response)
     return response
+
+
+def get_open_trades(version_id) -> Response:
+    """
+    Fetches open trades based on predefined conditions in a document associated with a given version ID.
+
+    This function retrieves a specific setup version by its ID, then fetches the associated document to obtain the first open condition. It applies this condition to filter trades from the version's state, which is converted to a DataFrame for processing. The function returns the filtered trades in a structured JSON format, indicating successful operation, or returns an error message in case of failure.
+
+    Parameters:
+    - version_id (str): The unique identifier of the setup version from which to fetch open trades.
+
+    Returns:
+    - Flask.Response: A Flask JSON response object containing either:
+        a) A success response with "openTrades" key holding the filtered open trades and a "success" flag set to True.
+        b) An error response with "message" key detailing the exception encountered and a "success" flag set to False.
+
+    Raises:
+    - Exception: Catches and handles any exception that occurs during the process, returning a structured error message. Specific exceptions can be handled and logged for debugging purposes.
+    """
+    # TODO: fetch related documents in a more direct and efficient way if possible.
+    # version = Setup.objects(id=version_id).select_related('documentId').get()
+
+    version = Setup.objects(id=version_id).get()
+    account = Document.objects(id=version.documentId.id).get()
+
+    # Directly access the first open_condition from the account to avoid multiple accesses.
+    column = account.open_conditions[0].column
+    condition = account.open_conditions[0].condition
+    value = account.open_conditions[0].value
+    column_type = account.state["fields"].get(column)
+
+    # Convert the database state to a DataFrame once to avoid redundant conversions.
+    df = from_db_to_df(version.state)
+
+    try:
+        # Filter the DataFrame based on the open trades criteria.
+        open_trades = filter_open_trades(df, column, column_type, condition, value)
+        return jsonify(
+            {
+                "openTrades": from_df_to_db(open_trades),
+                "success": True,
+            }
+        )
+
+    except Exception as error:
+        # TODO: consider logging the error here.
+        return jsonify(
+            {
+                "message": str(error),
+                "success": False,
+            }
+        )

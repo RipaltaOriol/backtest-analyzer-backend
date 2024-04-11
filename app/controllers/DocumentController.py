@@ -400,7 +400,7 @@ def put_account_settings(account_id) -> Response:
                     open_trade_condition = TradeCondition(
                         column=open_column,
                         condition=open_operation,
-                        value=open_value,
+                        value=str(open_value),
                     )
 
                     account.modify(open_conditions=[open_trade_condition])

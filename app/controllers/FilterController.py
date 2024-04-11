@@ -2,6 +2,7 @@ import json
 import os
 from datetime import datetime, timedelta
 from io import StringIO
+from typing import Union
 
 import numpy as np
 import pandas as pd
@@ -289,7 +290,11 @@ def delete_filter(setup_id, filter_id):
 
 # TODO: this will need some rework and heavy testing
 def filter_open_trades(
-    df: pd.DataFrame, column: str, column_type: str, operation: str, value: str
+    df: pd.DataFrame,
+    column: str,
+    column_type: str,
+    operation: str,
+    value: Union[float, int, str],
 ):
     """
     Filters a DataFrame based on a specified operation applied to a given column.
@@ -302,7 +307,7 @@ def filter_open_trades(
     - operation (str): The operation to perform. Supported operations include
       "empty", "not_empty", "equal", "not_equal", "higher", "lower",
       "before" (for datetime), and "after" (for datetime).
-    - value (str): The value to compare against for "equal", "not_equal",
+    - value (str or int): The value to compare against for "equal", "not_equal",
       "higher", "lower", "before", and "after" operations. Its type should
       match the type of the column being compared. Default is None.
     - column_type (str): The data type of the column, which can be "object",
@@ -325,6 +330,8 @@ def filter_open_trades(
 
         # Operations based on column_type
         if column_type in ["object", "float64", "int64"]:
+            # Parse value as number if data type is a number
+            value = float(value) if column_type in ["float64", "int64"] else value
             if operation == "equal":
                 return df[df[column] == value]
             elif operation == "not_equal":

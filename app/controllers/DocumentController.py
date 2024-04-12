@@ -282,9 +282,11 @@ def put_document_columns(account_id):
                 del fields[column_name]
                 fields[new_column] = expected_type
 
-            except Exception as err:
+            except Exception as error:
                 failure_to_update.append(column_name)
-                print("Something went wrong: ", err)
+                logging.error(
+                    f"Failed to update column ${column_name} on ${account_id} with args ${props}. Error: ${error}"
+                )
 
     # check if account contains a result
     if not [column for column in df.columns if re.match(r"col_[vpr]_", column)]:
@@ -304,8 +306,8 @@ def put_document_columns(account_id):
             wiht_fields=True,
             remove_filters=True,
         )
-    except Exception as err:
-        print("Something went wrong: ", err)
+    except Exception as error:
+        logging.error(f"Failed to update setups on ${account_id}. Error: ${error}")
         return jsonify({"msg": "Something went wrong. Try again!", "success": False})
 
     if failure_to_update:
@@ -641,8 +643,8 @@ def put_document_row(file_id):
         document = Document.objects(id=file_id).first()
         document_df = from_db_to_df(document.state)
         update_setups(document.id, document_df)
-    except Exception as err:
-        print("Something went wrong", err)
+    except Exception as error:
+        logging.error(f"Failed to update setups on ${file_id}. Error: ${error}")
         return jsonify({"msg": "Something went wrong. Try again!", "success": False})
 
     return jsonify({"msg": "Document updated correctly!", "success": True})
@@ -696,7 +698,6 @@ async def fetch_metatrader():
         account_history = get_account_history(connection_string, platform)
 
         if account_history.get("success"):
-            print(account_history.get("account_history"))
             state = upaload_meta_api(account_history.get("account_history"))
             default_template = Template.objects(name="Default").get()
 

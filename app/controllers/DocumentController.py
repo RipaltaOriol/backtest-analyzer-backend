@@ -529,8 +529,9 @@ def post_document():
             return jsonify(
                 {"msg": "File source could not be identified", "success": False}
             )
-    except UploadError as err:
-        return jsonify({"msg": err.message, "success": False})
+    except UploadError as error:
+        logging.exception(f"File failed to upload: ${file.filename}. Error: ${error}")
+        return jsonify({"msg": error.message, "success": False})
 
     # save the file to the DB
     default_template = Template.objects(name="Default").get()

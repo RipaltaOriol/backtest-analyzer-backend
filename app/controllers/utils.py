@@ -228,7 +228,7 @@ def validation_pipeline(data):
         # sanitizes and parses percentage columns
         if re.match(r"col_p_", column):
             # check if value is present
-            if data[column]:
+            if data[column] or data[column] == 0:
                 data[column] = float(data[column]) / 100
             else:
                 data[column] = None

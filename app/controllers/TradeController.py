@@ -64,8 +64,6 @@ def put_trade(account_id, trade_id):
     try:
         trade = validation_pipeline(trade)
 
-        # TODO: double check if this is necesary
-        # remove unnecessary keys from row
         trade.pop("rowId", None)
 
         account.modify(__raw__={"$set": {f"state.data.{trade_id}": trade}})

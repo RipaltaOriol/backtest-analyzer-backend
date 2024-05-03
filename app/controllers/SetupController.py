@@ -647,7 +647,7 @@ def get_bubble_results(setup_id):
         return jsonify(
             {
                 "success": False,
-                "msg": "Risk Reward is not available in this account",
+                "msg": "Risk Reward was not found on this account.",
             }
         )
 
@@ -721,8 +721,8 @@ def get_calendar_table(setup_id):
             {"success": False, "msg": "Account does not contain any date information."}
         )
 
-    metric = metric_list[0] if metric is None else metric
-    date = date_list[0] if date is None else date
+    metric = metric_list[0] if metric is None or metric not in metric_list else metric
+    date = date_list[0] if date is None or date not in date_list else date
     # Reset index to get the index column passed in to the JSON
     table = df.reset_index(names="rowId").to_json(orient="records", date_format="iso")
     table = json.loads(table)
@@ -737,6 +737,121 @@ def get_calendar_table(setup_id):
 
     response = jsonify(response)
     return response
+
+
+def get_calendar_statistics(version_id) -> Response:
+    """
+    Returns statistics on the version performance for the given month and year,
+    with optional timezone offset adjustments.
+    """
+    # TODO: refactor into a smaller function and create unit tests
+    metric_column = request.args.get("metric", None)
+    date_column = request.args.get("date", None)
+    calendar_month_year = request.args.get("monthYear")
+    timezone_offset = request.args.get("offset", default=0, type=int)
+
+    if not all([metric_column, date_column, calendar_month_year]):
+        return jsonify({"success": False, "msg": "Required parameters are missing."})
+
+    try:
+        month, year = map(int, calendar_month_year.split("/"))
+    except ValueError:
+        return jsonify(
+            {"success": False, "msg": "Invalid monthYear format. Use MM/YYYY format."}
+        )
+
+    try:
+        version = Setup.objects(id=version_id).get()
+        df = from_db_to_df(version.state, orient="index")
+        columns = version.state.get("fields").keys()
+    except Exception as e:
+        return jsonify({"success": False, "msg": str(e)})
+
+    if metric_column not in columns or date_column not in columns:
+        return jsonify({"success": False, "msg": "Invalid metric or date selected."})
+
+    df[date_column] = pd.to_datetime(df[date_column]) + pd.Timedelta(
+        minutes=-timezone_offset
+    )
+    df = df.set_index(date_column)
+
+    current_df = df.loc[(df.index.month == month) & (df.index.year == year)]
+    previous_month = month - 1 if month > 1 else 12
+    previous_year = year - 1 if previous_month == 12 else year
+    previous_df = df.loc[
+        (df.index.month == previous_month) & (df.index.year == previous_year)
+    ]
+
+    if current_df.empty:
+        return jsonify(
+            {
+                "success": False,
+                "msg": "No data available for the specified month and year.",
+            }
+        )
+
+    def calculate_metrics(data, result_column=None):
+        round_decimals = 2
+
+        positive = data[data > 0].sum()
+        negative = data[data < 0].sum()
+
+        if result_column and result_column.startswith("col_p_"):
+            round_decimals = 4
+            positive = positive * 100
+            negative = negative * 100
+
+        negative = 1 if negative == 0 else negative  # to avoid division by zero
+
+        # prevent NaN or invalid values
+        maximum = round(data.max(), round_decimals)
+        maximum = 0 if maximum < 0 or math.isnan(maximum) else maximum
+        minimum = round(data.min(), round_decimals)
+        minimum = 0 if minimum > 0 or math.isnan(minimum) else minimum
+        average = round(data.mean(), round_decimals)
+        average = 0 if math.isnan(average) else average
+
+        metrics = {
+            "total_trades": len(data),
+            "net_pnl": round(data.sum(), round_decimals),
+            "average_profit": average,
+            "max_win": maximum,
+            "max_loss": minimum,
+            "wins": (data > 0).sum(),
+            "losses": (data < 0).sum(),
+            "breakEvens": (data == 0).sum(),
+            "profit_factor": round(positive / abs(negative), 2),
+        }
+        return metrics
+
+    current_stats = calculate_metrics(current_df[metric_column], metric_column)
+    previous_stats = calculate_metrics(previous_df[metric_column], metric_column)
+
+    # calculate percentage differences
+    def percentage_change(current, previous):
+        return (
+            round(100 * (current - previous) / abs(previous), 2)
+            if previous != 0
+            else 0.00
+        )
+
+    previous_stats_changes = {
+        "total_trades": percentage_change(
+            current_stats["total_trades"], previous_stats["total_trades"]
+        ),
+        "net_pnl": percentage_change(
+            current_stats["net_pnl"], previous_stats["net_pnl"]
+        ),
+    }
+
+    response = {
+        "current": current_stats,
+        "previous": previous_stats_changes,
+        "success": True,
+    }
+
+    response_json = json.dumps(response, cls=NpEncoder)
+    return Response(response_json, mimetype="application/json")
 
 
 def get_open_trades(version_id) -> Response:
@@ -761,6 +876,15 @@ def get_open_trades(version_id) -> Response:
 
     version = Setup.objects(id=version_id).get()
     account = Document.objects(id=version.documentId.id).get()
+
+    # check if condition is set
+    if not account.open_conditions:
+        return jsonify(
+            {
+                "openTrades": {},
+                "success": True,
+            }
+        )
 
     # Directly access the first open_condition from the account to avoid multiple accesses.
     column = account.open_conditions[0].column

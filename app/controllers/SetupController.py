@@ -605,7 +605,11 @@ def get_cumulative_results(setup_id):
     for column in result_columns:
         data[column] = df[column].cumsum().replace({np.nan: None}).tolist()
 
-    result = {"success": True, "labels": list(range(1, len(df.index))), "data": data}
+    result = {
+        "success": True,
+        "labels": list(range(1, len(df.index) + 1)),
+        "data": data,
+    }
 
     return jsonify(result)
 

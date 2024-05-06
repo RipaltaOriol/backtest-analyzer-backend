@@ -2,12 +2,14 @@ from app.controllers.PDFController import get_file
 from app.controllers.SetupController import (
     delete_setup,
     get_bubble_results,
+    get_calendar_statistics,
     get_calendar_table,
     get_cumulative_results,
     get_daily_distribution,
     get_graphics,
     get_graphs,
     get_net_results,
+    get_open_trades,
     get_setup_row,
     get_setups,
     get_statistics,
@@ -63,4 +65,12 @@ setup_bp.route("/<setup_id>/charts/cum", methods=["GET"])(
 
 setup_bp.route("/<setup_id>/calendar", methods=["GET"])(
     jwt_required()(get_calendar_table)
+)
+setup_bp.route("/<version_id>/calendar/statistics", methods=["GET"])(
+    jwt_required()(get_calendar_statistics)
+)
+
+# Version Trades
+setup_bp.route("/<version_id>/open-trades", methods=["GET"])(
+    jwt_required()(get_open_trades)
 )

@@ -2,6 +2,7 @@ import json
 import os
 from datetime import datetime, timedelta
 from io import StringIO
+from typing import Union
 
 import numpy as np
 import pandas as pd
@@ -285,3 +286,73 @@ def delete_filter(setup_id, filter_id):
 
     except:
         return handle_403(msg="Somethign went wrong")
+
+
+# TODO: this will need some rework and heavy testing
+def filter_open_trades(
+    df: pd.DataFrame,
+    column: str,
+    column_type: str,
+    operation: str,
+    value: Union[float, int, str],
+):
+    """
+    Filters a DataFrame based on a specified operation applied to a given column.
+    This function supports a variety of operations such as checking for empty/non-empty
+    values, equality, numeric comparisons, and datetime comparisons.
+
+    Parameters:
+    - df (pd.DataFrame): The DataFrame to be filtered.
+    - column (str): The name of the column in the DataFrame to apply the filter on.
+    - operation (str): The operation to perform. Supported operations include
+      "empty", "not_empty", "equal", "not_equal", "higher", "lower",
+      "before" (for datetime), and "after" (for datetime).
+    - value (str or int): The value to compare against for "equal", "not_equal",
+      "higher", "lower", "before", and "after" operations. Its type should
+      match the type of the column being compared. Default is None.
+    - column_type (str): The data type of the column, which can be "object",
+      "float64", "int64", or start with "datetime64". It is particularly necessary
+      for datetime comparisons. Default is None.
+
+    Returns:
+    pd.DataFrame: A DataFrame filtered based on the specified operation and conditions.
+
+    Raises:
+    - ValueError: If an unsupported operation is provided.
+
+    """
+    try:
+        # Handle 'empty' and 'not_empty' operations directly
+        if operation == "empty":
+            return df[df[column].isna() | (df[column] == "")]
+        elif operation == "not_empty":
+            return df[df[column].notna() & (df[column] != "")]
+
+        # Operations based on column_type
+        if column_type in ["object", "float64", "int64"]:
+            # Parse value as number if data type is a number
+            value = float(value) if column_type in ["float64", "int64"] else value
+            if operation == "equal":
+                return df[df[column] == value]
+            elif operation == "not_equal":
+                return df[df[column] != value]
+            elif column_type in ["float64", "int64"]:  # Numeric comparisons
+                if operation == "higher":
+                    return df[df[column] > value]
+                elif operation == "lower":
+                    return df[df[column] < value]
+
+        elif column_type.startswith("datetime64"):
+            # Convert value to datetime format expected by pandas
+            date_value = datetime.strptime(value, "%m/%d/%Y").strftime("%Y-%m-%d")
+            if operation == "before":
+                return df[df[column] < date_value]
+            elif operation == "after":
+                return df[df[column] > date_value]
+
+        raise ValueError(
+            "No filter match for column was achieved. Review condition for open positions."
+        )
+    except Exception as error:
+        print(error)
+        raise ValueError("Something went wrong.")

@@ -18,7 +18,7 @@ load_dotenv()
 # Logger config
 logging.basicConfig(
     format="%(asctime)s %(name)s [%(levelname)s] %(message)s",
-    datefmt="%H:%M:%S",
+    datefmt="%d-%b-%y %H:%M:%S",
     level=logging.INFO,
 )
 # logging.getLogger("flask_cors").level = logging.DEBUG

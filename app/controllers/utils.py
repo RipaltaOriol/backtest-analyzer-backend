@@ -6,6 +6,11 @@ from io import StringIO
 
 import numpy as np
 import pandas as pd
+from app.constants.columns import (
+    EXACT_FLOAT_COLUMNS,
+    EXACT_STRING_COLUMNS,
+    NON_EXACT_FLOAT_COLUMNS,
+)
 
 TEMPLATE_PPT_POSITIONS = ["size", "order_type", "risk_reward", "price", "risk"]
 TEMPLATE_PPT_TAKE_PROFIT = "take_profit"
@@ -242,3 +247,21 @@ def validation_pipeline(data):
                 data[column] = None
 
     return data
+
+
+def get_columm_expected_type(column, type_hint=None):
+    """
+    Returns the expected type for a given a column name
+    """
+    if column.startswith("col_d_"):
+        return "datetime64[ns, utc]"
+    elif column in EXACT_FLOAT_COLUMNS:
+        return "float64"
+    elif column in NON_EXACT_FLOAT_COLUMNS:
+        return "float64"
+    elif column in EXACT_STRING_COLUMNS:
+        return "object"
+    elif column.startswith("col_m_"):
+        return type_hint if type_hint else "object"
+    else:
+        return "object"

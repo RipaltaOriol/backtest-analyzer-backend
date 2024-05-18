@@ -71,7 +71,6 @@ def post_user_template(templateId):
 
 def login():
     """Login User"""
-    logging.info("Loging attempt - TEST")  # remove this after testing
     email = request.json.get("email", None)
     password = request.json.get("password", None)
     user = User.objects(email=email).first()

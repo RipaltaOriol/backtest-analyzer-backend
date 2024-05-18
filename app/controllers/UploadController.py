@@ -185,7 +185,8 @@ def _add_required_columns(df):
     return df
 
 
-def upaload_meta_api(account_history: object) -> object:
+def upload_meta_api(account_history: object) -> object:
+    # TODO: move this to AccountManager service
     data = pd.DataFrame.from_dict(account_history, orient="columns")
     pd.set_option("display.max_rows", None, "display.max_columns", None)
     data[["ticket", "symbol", "type", "swap", "profit"]]

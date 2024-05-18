@@ -1,5 +1,5 @@
 import json
-import os
+import logging
 from datetime import datetime, timedelta
 from io import StringIO
 from typing import Union
@@ -354,5 +354,5 @@ def filter_open_trades(
             "No filter match for column was achieved. Review condition for open positions."
         )
     except Exception as error:
-        print(error)
-        raise ValueError("Something went wrong.")
+        logging.error(f"Error on filtering for open trades: {str(error)}")
+        raise ValueError(str(error))

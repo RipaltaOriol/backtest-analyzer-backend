@@ -451,7 +451,7 @@ def update_setups(
     document_fields=None,
     wiht_fields=False,
     remove_filters=False,
-):
+) -> None:
     """
     Updates the setups state from parent state
     """

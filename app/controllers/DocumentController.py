@@ -1,27 +1,19 @@
-import asyncio
 import json
 import logging
-import os
 import re
-import shutil
 import uuid
-from datetime import datetime, timedelta
-from io import StringIO
 
 import pandas as pd
 from app import app
 from app.controllers.errors import UploadError
 from app.controllers.FilterController import filter_open_trades
 from app.controllers.RowController import update_mappings_to_template
-from app.controllers.SetupController import get_children, update_setups
-from app.controllers.UploadController import (
-    upaload_meta_api,
-    upload_default,
-    upload_mt4,
-)
+from app.controllers.SetupController import update_setups
+from app.controllers.UploadController import upload_default, upload_mt4
 from app.controllers.utils import (
     from_db_to_df,
     from_df_to_db,
+    get_columm_expected_type,
     parse_column_name,
     validation_pipeline,
 )
@@ -29,12 +21,11 @@ from app.models.Document import Document, TradeCondition
 from app.models.Setup import Setup
 from app.models.Template import Template
 from app.models.User import User
-from app.services.MT4_api import (
-    connect_account,
-    discover_server_ip,
-    get_account_history,
-)
-from bson import DBRef, ObjectId, json_util
+from app.repositories.version_repository import VersionRepository
+from app.services.account_manager import AccountManager
+from app.services.filter_service import FilterService
+from app.services.version_service import VersionService
+from bson import json_util
 from flask import jsonify, request
 from flask.wrappers import Response
 from flask_jwt_extended import get_jwt_identity
@@ -224,114 +215,146 @@ def put_document_columns(account_id):
     """
     Updates the account columns
     """
+    # TODO: some logic here can be abstracted
     id = get_jwt_identity()
     user = User.objects(id=id["$oid"]).get()
 
-    account = Document.objects(id=account_id, author=user).get()
-    columns = request.json
+    account = Document.objects(id=account_id, author=user).first()
 
-    template_columns = (
-        [*account.template_mapping.values()] if account.template_mapping else []
-    )
-
-    failure_to_update = []
-
-    fields = account.state.get("fields")
-    field_names = [*fields.keys()]
-    df = from_db_to_df(account.state)
-    for to_delete_column in columns.pop("to_delete", []):
-        # checks column is not used in templates
-        if to_delete_column in template_columns:
-            failure_to_update.append(to_delete_column)
-            continue
-
-        df = df.drop(to_delete_column, axis=1, errors="ignore")
-        del fields[to_delete_column]
-
-    for column_name, props in columns.items():
-        action = props.get("action")
-        if action == "add":
-            # check column does not exist
-            if column_name in field_names:
-                failure_to_update.append(column_name)
-            else:
-                new_type = props.get("type", None)
-                expected_type = get_columm_expected_type(column_name, new_type)
-
-                fields[column_name] = expected_type
-                df[column_name] = None
-
-        elif action == "edit":
-            # check column does not exist and is not being used in templates
-            if column_name in template_columns or column_name not in field_names:
-                failure_to_update.append(column_name)
-                continue
-            try:
-                new_column = props.get("new_column")
-                new_type = props.get("type", None)
-
-                expected_type = get_columm_expected_type(new_column, new_type)
-
-                df[column_name] = (
-                    df[column_name]
-                    .astype(expected_type)
-                    .where(df[column_name].notnull(), None)
-                )
-                df.rename(columns={column_name: new_column}, inplace=True)
-
-                del fields[column_name]
-                fields[new_column] = expected_type
-
-            except Exception as error:
-                failure_to_update.append(column_name)
-                logging.error(
-                    f"Failed to update column ${column_name} on ${account_id} with args ${props}. Error: ${error}"
-                )
-
-    # check if account contains a result
-    if not [column for column in df.columns if re.match(r"col_[vpr]_", column)]:
+    if not account:
         return jsonify(
-            {"success": False, "msg": "At least one result property is required!"}
+            {"success": False, "msg": "Account not found. Please try again."}
         )
 
+    add_columns = request.json.get("add", [])
+    edit_columns = request.json.get("edit", [])
+    delete_columns = request.json.get("delete", [])
+
+    # Get state of the account
+    df = from_db_to_df(account.state)
+
+    # Get columns mapped to a template
+    template_columns = (
+        list(account.template_mapping.values()) if account.template_mapping else []
+    )
+
+    # Extract account columns (fields)
+    fields = account.state.get("fields")
+    account_fields = list(fields.keys())
+
+    # Track filters to remove
+    filters_to_remove = []
+
+    try:
+        # Handle columns to delete
+        for column in delete_columns:
+            # Validates column is not used within templates
+            if column in template_columns:
+                return jsonify(
+                    {
+                        "success": False,
+                        "msg": f"Column {parse_column_name(column)} cannot be deleted becuase it's used in a template. Modify your template settings to delete this column.",
+                    }
+                )
+            df = df.drop(column, axis=1, errors="ignore")
+            del fields[column]
+            filters_to_remove.append(column)
+
+        # Handle columns to add
+        for column in add_columns:
+            column_id = column["column"]
+            column_name = column_id + column["name"]
+            if column_name in account_fields:
+                return jsonify(
+                    {
+                        "success": False,
+                        "msg": f"Column {parse_column_name(column_name)} cannot be added because it already exists.",
+                    }
+                )
+            # Set the column type
+            column_type = column.get("type", None)
+            column_type = get_columm_expected_type(column_id, column_type)
+
+            fields[column_name] = column_type
+            df[column_name] = None
+
+        # Handle columns to edit
+        for column in edit_columns:
+            column_id = column["column"]
+            new_column_name = column["new_name"]
+            pre_column_name = column["prev_name"]
+
+            # Validates column is not used within templates but exists
+            if (
+                pre_column_name in template_columns
+                or pre_column_name not in account_fields
+            ):
+                return jsonify(
+                    {
+                        "success": False,
+                        "msg": f"Column {parse_column_name(pre_column_name)} cannot be edited because it is used in a template or does not exist.",
+                    }
+                )
+
+            # Set the column type
+            column_type = column.get("type", None)
+            column_type = get_columm_expected_type(new_column_name, column_type)
+
+            df[pre_column_name] = (
+                df[pre_column_name]
+                .astype(column_type)
+                .where(df[pre_column_name].notnull(), None)
+            )
+            df.rename(columns={pre_column_name: new_column_name}, inplace=True)
+
+            del fields[pre_column_name]
+            fields[new_column_name] = column_type
+            filters_to_remove.append(pre_column_name)
+
+    except Exception as e:
+        # TODO: this exception could be more specific on what column failed
+        logging.error(
+            f"Error updating columns for account {account_id}: {str(e)}"
+        )  # TODO: IMPROVE THIS MESSAGE
+        return jsonify(
+            {
+                "success": False,
+                "msg": "Failed to update account columns. Please try again.",
+            }
+        )
+
+    # Ensure a result column is present for the account
+    if not [column for column in df.columns if re.match(r"col_[vpr]_", column)]:
+        return jsonify(
+            {
+                "success": False,
+                "msg": "At least one result column is required for an account.",
+            }
+        )
+
+    # Update document and its state
     data = from_df_to_db(df)
     account.update(__raw__={"$set": {f"state": {"fields": fields, "data": data}}})
 
     try:
-        # TODO: not all filters have to be removed
-        update_setups(
-            account.id,
-            df,
-            document_fields=fields,
-            wiht_fields=True,
-            remove_filters=True,
+        # TODO: this should not be here (performance related)
+        version_repository = VersionRepository()
+        filter_service = FilterService()
+        version_service = VersionService(version_repository, filter_service)
+
+        version_service.update_version_from_account_without_filters(
+            account.id, df, fields, filters_to_remove
         )
+
     except Exception as error:
-        logging.error(f"Failed to update setups on ${account_id}. Error: ${error}")
-        return jsonify({"msg": "Something went wrong. Try again!", "success": False})
-
-    if failure_to_update:
-        parse_columns = ", ".join(
-            [parse_column_name(column) for column in failure_to_update]
+        logging.error(
+            f"Failed to update setups on ${account_id} during a column update. Error: ${str(error)}"
         )
-        return jsonify({"success": False, "msg": f"Fail to update: {parse_columns}"})
+        return jsonify(
+            {"msg": "Something went wrong. Please try again.", "success": False}
+        )
 
-    return jsonify(
-        {"success": True, "msg": "Account fields have been updated correctly!"}
-    )
-
-
-def get_columm_expected_type(column, type_specification=None):
-    # TODO: move this into utils
-    # TODO: potential issue here
-    if column.startswith("col_m_"):
-        return type_specification
-    elif column.startswith("col_d_"):
-        return "datetime64[ns, utc]"
-    elif column == "col_d" or column == "col_p" or column == "col_t":
-        return "object"
-    else:
-        return "float64"
+    return jsonify({"success": True, "msg": "The account was successfully modified!"})
 
 
 def get_account_settings(account_id):
@@ -682,56 +705,13 @@ async def fetch_metatrader():
     server = request.json.get("server", None)
     platform = request.json.get("platform", None)
 
-    if not account and not password and not server and not platform:
+    # Check all variables exist
+    if not all([account, password, server, platform]):
         return jsonify({"msg": "Some information is missing.", "success": False})
 
-    # ensure no duplicate accounts are created
-    is_file_exists = Document.objects(name=f"{account}+{server}", author=user)
-    if len(is_file_exists) > 0:
-        return jsonify({"msg": "This file already exists", "success": False})
-
-    server_ips = discover_server_ip(server, platform)
-    if server_ips.get("success"):
-        # TODO: ideally one wil try multiple API
-        ip = server_ips.get("server_ips")[0]
-
-        connection_string = connect_account(int(account), password, ip, platform)
-        account_history = get_account_history(connection_string, platform)
-
-        if account_history.get("success"):
-            state = upaload_meta_api(account_history.get("account_history"))
-            default_template = Template.objects(name="Default").get()
-
-            # TODO: is probably better not to store this information
-            account = Document(
-                name=f"{account}+{server}",
-                author=user,
-                state=state,
-                source=source_map.get(platform),
-                template=default_template,
-                metaapi_id=connection_string,
-                meta_account=account,
-                meta_password=password,
-                meta_server=server,
-            )
-            account.save()
-
-            # create an initial setup for the account
-            setup = Setup(
-                name="Default",
-                author=user,
-                documentId=account,
-                default=True,
-                state=state,
-            )
-            setup.save()
-
-            return jsonify({"msg": "Account successfully extracted!", "success": True})
-
-        else:
-            return jsonify(
-                {"msg": "Something went wrong. Try again later.", "success": False}
-            )
+    account_manager = AccountManager(user)
+    result = account_manager.fetch_from_metatrader(account, password, server, platform)
+    return jsonify(result)
 
 
 async def refetch_document(file_id):
@@ -756,7 +736,7 @@ async def refetch_document(file_id):
     #         {"msg": "Something went wrong. Try again later.", "success": False}
     #     )
 
-    # df = upaload_meta_api(meta_account["deals"])
+    # df = upload_meta_api(meta_account["deals"])
 
     # file.state = df
     # file.metaapi_id = meta_account["account_id"]

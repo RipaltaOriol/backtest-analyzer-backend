@@ -31,6 +31,9 @@ from app.models.PPTTemplate import PPTTemplate
 from app.models.Setup import Setup
 from app.models.Template import Template
 from app.models.User import User
+from app.repositories.user_repository import UserRepository
+from app.repositories.version_repository import VersionRepository
+from app.services.statistics_service import StatisticsService
 from app.utils.encoders import NpEncoder
 from bson import DBRef, ObjectId, json_util
 from flask import jsonify, request
@@ -270,100 +273,17 @@ def get_statistics(setup_id):
     """
     Gets Setup Statistics
     """
-    id = get_jwt_identity()
-    user = User.objects(id=id["$oid"]).get()
-    setup = Setup.objects(author=user, id=setup_id).get()
-    data = from_db_to_df(setup.state)
-    result_columns = [col for col in data if re.match(r"col_[vpr]_", col)]
-    response = {}
-    count = {"stat": "Count"}
-    total = {"stat": "Total"}
-    mean = {"stat": "Mean"}
-    wins = {"stat": "Wins"}
-    losses = {"stat": "Losses"}
-    break_even = {"stat": "Break Even"}
-    win_rate = {"stat": "Win Rate"}
-    avg_win = {"stat": "Average Win"}
-    avg_loss = {"stat": "Average Loss"}
-    expectancy = {"stat": "Expectancy"}
-    max_consec_loss = {"stat": "Max. Consecutive Losses"}
-    max_win = {"stat": "Maximum Win"}
-    drawdown = {"stat": "Drawdown"}
-    for col in result_columns:
+    version_repository = VersionRepository()
+    version = version_repository.get_version_by_id(setup_id)
+    version_df = version_repository.get_version_dataframe(version)
+    stats_service = StatisticsService()
+    statistics, error = stats_service.get_dataframe_statistics(version_df)
 
-        column_decorator = get_result_decorator(col)
-
-        count[col] = 0
-        total[col] = 0
-        wins[col] = 0
-        losses[col] = 0
-        break_even[col] = 0
-        total_wins = 0
-        total_losses = 0
-        consecutive_losses = 0
-        current_losses = 0
-        for val in data[col]:
-            # TODO: add this when efficiently detecting misplaced values
-            # skip NaN values
-            # if pd.isna(val):
-            #     continue
-            count[col] += 1 if not np.isnan(val) else 0
-            total[col] += val if not np.isnan(val) else 0
-            if val > 0:
-                wins[col] += 1
-                total_wins += val
-                consecutive_losses = max(consecutive_losses, current_losses)
-                current_losses = 0
-            elif val < 0:
-                total_losses += val
-                losses[col] += 1
-                current_losses += 1
-            elif val == 0:
-                break_even[col] += 1
-                consecutive_losses = max(consecutive_losses, current_losses)
-                current_losses = 0
-        data["cumulative"] = data[col].cumsum().round(2)
-        data["high_value"] = data["cumulative"].cummax()
-        data["drawdown"] = data["cumulative"] - data["high_value"]
-        drawdown[col] = float(data["drawdown"].min())
-        mean[col] = total[col] / count[col] if count[col] else 0
-        win_rate[col] = wins[col] / count[col] if count[col] else 0
-        avg_win[col] = total_wins / wins[col] if wins[col] else 0
-        avg_loss[col] = total_losses / losses[col] if losses[col] else 0
-        expectancy[col] = (win_rate[col] * avg_win[col]) - (
-            (1 - win_rate[col]) * abs(avg_loss[col])
-        )
-        max_consec_loss[col] = max(consecutive_losses, current_losses)
-        max_win[col] = float(data[col].max())
-        response[col] = {
-            "count": count[col],
-            "drawdown": round(data["drawdown"].min(), 3)
-            if not math.isnan(data["drawdown"].min())
-            else None,
-            "total": round(total[col], 3),
-            "mean": round(mean[col], 3),  # bug here with nan
-            "wins": wins[col],
-            "losses": losses[col],
-            "breakEvens": break_even[col],
-            "win_rate": round(wins[col] / count[col], 4) if count[col] else 0,
-            "avg_win": round(total_wins / wins[col], 2) if wins[col] else 0,
-            "avg_loss": round(total_losses / losses[col], 2) if losses[col] else 0,
-            "expectancy": round(
-                (win_rate[col] * avg_win[col])
-                - ((1 - win_rate[col]) * abs(avg_loss[col])),
-                2,
-            ),
-            "max_consec_loss": max(consecutive_losses, current_losses),
-            "max_win": round(data[col].max(), 2)
-            if not math.isnan(data[col].max())
-            else None,
-            "profit_factor": round(total_wins / abs(total_losses), 2)
-            if total_losses
-            else round(total_wins, 2),
-        }
+    if error:
+        return jsonify({"success": False, "msg": error}), 400
 
     response = {
-        "data": response,
+        "data": statistics,
         "success": True,
     }
     response = json.dumps(response, cls=NpEncoder)
@@ -748,10 +668,9 @@ def get_calendar_statistics(version_id) -> Response:
     Returns statistics on the version performance for the given month and year,
     with optional timezone offset adjustments.
     """
-    # TODO: refactor into a smaller function and create unit tests
     metric_column = request.args.get("metric", None)
     date_column = request.args.get("date", None)
-    calendar_month_year = request.args.get("monthYear")
+    calendar_month_year = request.args.get("monthYear", None)
     timezone_offset = request.args.get("offset", default=0, type=int)
 
     if not all([metric_column, date_column, calendar_month_year]):
@@ -764,98 +683,27 @@ def get_calendar_statistics(version_id) -> Response:
             {"success": False, "msg": "Invalid monthYear format. Use MM/YYYY format."}
         )
 
-    try:
-        version = Setup.objects(id=version_id).get()
-        df = from_db_to_df(version.state, orient="index")
-        columns = version.state.get("fields").keys()
-    except Exception as e:
-        return jsonify({"success": False, "msg": str(e)})
+    # TODO: UPDATE THIS AND REGULAR STATISTICS
+    version_service = VersionRepository()
 
-    if metric_column not in columns or date_column not in columns:
+    version = version_service.get_version_by_id(version_id)
+
+    version_df = version_service.get_version_dataframe(version)
+    version_columns = version_service.get_version_columns(version)
+
+    if metric_column not in version_columns or date_column not in version_columns:
         return jsonify({"success": False, "msg": "Invalid metric or date selected."})
 
-    df[date_column] = pd.to_datetime(df[date_column]) + pd.Timedelta(
-        minutes=-timezone_offset
+    stats_service = StatisticsService()
+    result, error = stats_service.get_calendar_statistics(
+        version_df, date_column, metric_column, month, year, timezone_offset
     )
-    df = df.set_index(date_column)
 
-    current_df = df.loc[(df.index.month == month) & (df.index.year == year)]
-    previous_month = month - 1 if month > 1 else 12
-    previous_year = year - 1 if previous_month == 12 else year
-    previous_df = df.loc[
-        (df.index.month == previous_month) & (df.index.year == previous_year)
-    ]
+    if error:
+        return jsonify({"success": False, "msg": error})
 
-    if current_df.empty:
-        return jsonify(
-            {
-                "success": False,
-                "msg": "No data available for the specified month and year.",
-            }
-        )
-
-    def calculate_metrics(data, result_column=None):
-        round_decimals = 2
-
-        positive = data[data > 0].sum()
-        negative = data[data < 0].sum()
-
-        if result_column and result_column.startswith("col_p_"):
-            round_decimals = 4
-            positive = positive * 100
-            negative = negative * 100
-
-        negative = 1 if negative == 0 else negative  # to avoid division by zero
-
-        # prevent NaN or invalid values
-        maximum = round(data.max(), round_decimals)
-        maximum = 0 if maximum < 0 or math.isnan(maximum) else maximum
-        minimum = round(data.min(), round_decimals)
-        minimum = 0 if minimum > 0 or math.isnan(minimum) else minimum
-        average = round(data.mean(), round_decimals)
-        average = 0 if math.isnan(average) else average
-
-        metrics = {
-            "total_trades": len(data),
-            "net_pnl": round(data.sum(), round_decimals),
-            "average_profit": average,
-            "max_win": maximum,
-            "max_loss": minimum,
-            "wins": (data > 0).sum(),
-            "losses": (data < 0).sum(),
-            "breakEvens": (data == 0).sum(),
-            "profit_factor": round(positive / abs(negative), 2),
-        }
-        return metrics
-
-    current_stats = calculate_metrics(current_df[metric_column], metric_column)
-    previous_stats = calculate_metrics(previous_df[metric_column], metric_column)
-
-    # calculate percentage differences
-    def percentage_change(current, previous):
-        return (
-            round(100 * (current - previous) / abs(previous), 2)
-            if previous != 0
-            else 0.00
-        )
-
-    previous_stats_changes = {
-        "total_trades": percentage_change(
-            current_stats["total_trades"], previous_stats["total_trades"]
-        ),
-        "net_pnl": percentage_change(
-            current_stats["net_pnl"], previous_stats["net_pnl"]
-        ),
-    }
-
-    response = {
-        "current": current_stats,
-        "previous": previous_stats_changes,
-        "success": True,
-    }
-
-    response_json = json.dumps(response, cls=NpEncoder)
-    return Response(response_json, mimetype="application/json")
+    response = json.dumps(result, cls=NpEncoder)
+    return Response(response, mimetype="application/json")
 
 
 def get_open_trades(version_id) -> Response:

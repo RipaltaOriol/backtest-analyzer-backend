@@ -142,6 +142,5 @@ def test_get_dataframe_statistics(stats_service):
     assert error is None
     assert "col_v_profit" in stats
     assert "col_p_profit %" in stats
-    print(stats)
     assert stats["col_v_profit"]["total"] == 200
     assert stats["col_p_profit %"]["wins"] == 3

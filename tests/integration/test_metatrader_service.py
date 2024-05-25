@@ -20,13 +20,11 @@ def test_metatrader_service_connection(server_name, mt_version, account, passwor
     ), "No IPs returned"
 
     successful_connection = False
-    print(response.get("server_ips", []))
     for ip in response.get("server_ips", []):
         try:
             connection_string = service.connect_account(
                 int(account), password, ip, mt_version
             )
-            print(connection_string)
             account_history = service.get_account_history(connection_string, mt_version)
             if account_history.get("success"):
                 successful_connection = True

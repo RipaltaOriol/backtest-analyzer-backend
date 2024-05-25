@@ -3,44 +3,16 @@ import re
 
 import numpy as np
 import pandas as pd
+from app.constants.columns import (
+    REQUIRED_COLUMNS,
+    get_mt_columns_rename,
+    get_mt_target_columns,
+)
 from app.controllers.errors import UploadError
 from app.controllers.utils import from_df_to_db
 from app.controllers.validation_pipelines.upload_pipelines import (
     df_column_datatype_validation,
 )
-from flask import jsonify
-
-REQUIRED_COLUMNS = ["note", "imgs"]
-TARGET_COLUMNS = [
-    "ticket",
-    "openTime",
-    "closeTime",
-    "type",
-    "lots",
-    "symbol",
-    "openPrice",
-    "stopLoss",
-    "takeProfit",
-    "closePrice",
-    "swap",
-    "commission",
-    "profit",
-]
-COLUMNS_RENAME = {
-    "ticket": "#",
-    "openTime": "col_d_Open Time",
-    "closeTime": "col_d_Close Time",
-    "type": "col_m_Type",
-    "lots": "col_m_Size",
-    "symbol": "col_p",
-    "openPrice": "col_o",
-    "closePrice": "col_c",
-    "stopLoss": "col_sl",
-    "takeProfit": "col_tp",
-    "commission": "col_m_Commision",
-    "swap": "col_m_Swap",
-    "profit": "col_v_Profit",
-}
 
 
 def upload_default(file):
@@ -183,47 +155,3 @@ def _add_required_columns(df):
             df[col] = ""
 
     return df
-
-
-def upload_meta_api(account_history: object) -> object:
-    # TODO: move this to AccountManager service
-    data = pd.DataFrame.from_dict(account_history, orient="columns")
-    pd.set_option("display.max_rows", None, "display.max_columns", None)
-    data[["ticket", "symbol", "type", "swap", "profit"]]
-
-    data = data.loc[
-        data["type"].isin(
-            ["Buy", "Sell", "BuyStop", "SellStop", "SellLimit", "BuyLimit"]
-        )
-    ]
-
-    # alternative code to only include executed orders
-    # data = data.loc[data['type'].isin(['Buy', 'Sell'])]
-
-    # filter specific columns
-    data = data[TARGET_COLUMNS]
-
-    data.loc[:, "openTime"] = pd.to_datetime(data["openTime"], utc=True)
-    data.loc[:, "closeTime"] = pd.to_datetime(data["closeTime"], utc=True)
-
-    data["col_d"] = np.where(
-        data["type"].str.startswith("Buy"),
-        "Long",
-        np.where(data["type"].str.startswith("Sell"), "Short", None),
-    )
-
-    data.rename(columns=COLUMNS_RENAME, errors="raise", inplace=True)
-
-    data.set_index("#", inplace=True, drop=False)
-
-    # add all required columns
-    df = _add_required_columns(data)
-    # validate dataframe dtypes
-    df = df_column_datatype_validation(df)
-
-    state = {
-        "data": from_df_to_db(df, add_index=False),
-        "fields": df.dtypes.apply(lambda x: x.name).to_dict(),
-    }
-
-    return state

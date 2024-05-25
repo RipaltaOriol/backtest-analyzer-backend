@@ -1,7 +1,6 @@
 import logging
 
 from app.constants.account_source import ACCOUNT_SOURCE_MAP
-from app.controllers.UploadController import upload_meta_api
 from app.models.Document import Document
 from app.repositories.template_repository import TemplateRepository
 from app.repositories.version_repository import VersionRepository
@@ -51,7 +50,15 @@ class AccountManager:
             }
 
         if account_history.get("success"):
-            state = upload_meta_api(account_history.get("account_history"))
+            state, error = self.meta_trade_service.get_accout_history_df(
+                account_history.get("account_history"), platform
+            )
+            if error:
+                return {
+                    "msg": error,
+                    "success": False,
+                }
+
             default_template = self.template_repository.get_template()
 
             account_doc = Document(

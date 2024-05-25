@@ -1,7 +1,16 @@
 import logging
 import os
+from typing import Tuple
 
+import numpy as np
+import pandas as pd
 import requests
+from app.constants.columns import get_mt_columns_rename, get_mt_target_columns
+from app.controllers.utils import from_df_to_db
+from app.controllers.validation_pipelines.upload_pipelines import (
+    df_column_datatype_validation,
+)
+from app.services.columns_service import ColumnsService
 
 
 class MetaTraderService:
@@ -52,7 +61,6 @@ class MetaTraderService:
             }
 
     def get_account_history(self, connection_string: str, mt_version: str) -> dict:
-        print(connection_string)
         mt_url = self.mt4_url if mt_version == "MT4_API" else self.mt5_url
         try:
             payload = {"id": connection_string}
@@ -65,3 +73,55 @@ class MetaTraderService:
                 "success": False,
                 "message": "Something went wrong. Please check that account credentials are correct.",
             }
+
+    def get_accout_history_df(
+        self, account_history: dict, mt_version: str
+    ) -> Tuple[dict, str]:
+        account = (
+            account_history.get("orders", {})
+            if mt_version == "MT5_API"
+            else account_history
+        )
+        if not account:
+            return None, "No data found in the account history"
+
+        df = pd.DataFrame.from_dict(account, orient="columns")
+        pd.set_option("display.max_rows", None, "display.max_columns", None)
+        order_type = "orderType" if mt_version == "MT5_API" else "type"
+        df[["ticket", "symbol", order_type, "swap", "profit"]]
+        df = df.loc[
+            df[order_type].isin(
+                ["Buy", "Sell", "BuyStop", "SellStop", "SellLimit", "BuyLimit"]
+            )
+        ]
+
+        # Include executed orders
+        # df = df.loc[df['type'].isin(['Buy', 'Sell'])]
+
+        # Filter out specific columns
+        df = df[get_mt_target_columns(mt_version)]
+        df.loc[:, "openTime"] = pd.to_datetime(df["openTime"], utc=True)
+        df.loc[:, "closeTime"] = pd.to_datetime(df["closeTime"], utc=True)
+        df["col_d"] = np.where(
+            df[order_type].str.startswith("Buy"),
+            "Long",
+            np.where(df[order_type].str.startswith("Sell"), "Short", None),
+        )
+        df.rename(
+            columns=get_mt_columns_rename(mt_version), errors="raise", inplace=True
+        )
+        df.set_index("#", inplace=True, drop=False)
+
+        # Add all required columns
+        columns_service = ColumnsService(df)
+        columns_service.add_required_columns()
+
+        # Validate dataframe dtypes
+        df = df_column_datatype_validation(df)
+
+        state = {
+            "data": from_df_to_db(df, add_index=False),
+            "fields": df.dtypes.apply(lambda x: x.name).to_dict(),
+        }
+
+        return state, None

@@ -21,9 +21,7 @@ from app.models.Document import Document, TradeCondition
 from app.models.Setup import Setup
 from app.models.Template import Template
 from app.models.User import User
-from app.repositories.version_repository import VersionRepository
 from app.services.account_manager import AccountManager
-from app.services.filter_service import FilterService
 from app.services.version_service import VersionService
 from bson import json_util
 from flask import jsonify, request
@@ -338,9 +336,7 @@ def put_document_columns(account_id):
 
     try:
         # TODO: this should not be here (performance related)
-        version_repository = VersionRepository()
-        filter_service = FilterService()
-        version_service = VersionService(version_repository, filter_service)
+        version_service = VersionService()
 
         version_service.update_version_from_account_without_filters(
             account.id, df, fields, filters_to_remove

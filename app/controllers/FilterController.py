@@ -12,6 +12,8 @@ from app.controllers.utils import from_db_to_df, from_df_to_db, retrieve_filter_
 from app.models.Document import Document
 from app.models.Filter import Filter
 from app.models.Setup import Setup
+from app.repositories.version_repository import VersionRepository
+from app.services.filter_service import FilterService
 from bson import DBRef, ObjectId, json_util
 from flask import jsonify, request
 from flask.wrappers import Response
@@ -25,6 +27,18 @@ class CustomJSONizer(json.JSONEncoder):
             if isinstance(obj, np.bool_)
             else super().default(obj)
         )
+
+
+# TODO: remove duplicate function and keep this one
+def get_filter_options_v2(version_id) -> Response:
+    version_repository = VersionRepository()
+    version = version_repository.get_version_by_id(version_id)
+    version_df = version_repository.get_version_dataframe(version)
+    filter_service = FilterService()
+    filter_options, error = filter_service.get_filter_options(version_df)
+    if error:
+        return jsonify({"success": False, "message": "Something went wrong."})
+    return jsonify({"success": True, "filters": filter_options})
 
 
 # TODO: this function can be improved
@@ -159,14 +173,14 @@ def post_filter(setup_id: str):
     """
     Adds a Filter to a Setup
     """
-    column = request.json.get("column", None)
+    column = request.json.get("columnId", None)
     operation = request.json.get("action", None)
     value = request.json.get("value", None)
+    operation = "date" if column.startswith("col_d_") else operation
     setup = Setup.objects(id=setup_id).first()
     df = from_db_to_df(setup.state)
     if column == None or operation == None or value == None:
         return handle_403(msg="Filter is not valid")
-
     df = apply_filter(df, column, operation, value)
     name = get_filter_name(column, operation, value)
     data = from_df_to_db(df)

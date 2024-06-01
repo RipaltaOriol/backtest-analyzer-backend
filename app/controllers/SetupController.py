@@ -34,6 +34,7 @@ from app.models.User import User
 from app.repositories.user_repository import UserRepository
 from app.repositories.version_repository import VersionRepository
 from app.services.statistics_service import StatisticsService
+from app.services.version_service import VersionService
 from app.utils.encoders import NpEncoder
 from bson import DBRef, ObjectId, json_util
 from flask import jsonify, request
@@ -765,3 +766,19 @@ def get_open_trades(version_id) -> Response:
                 "success": False,
             }
         )
+
+
+def get_version_note(version_id) -> json:
+    version_service = VersionService()
+    version_note = version_service.get_version_note(version_id)
+    return jsonify({"note": version_note, "success": True})
+
+
+def put_version_note(version_id) -> json:
+    notes = request.json.get("notes", None)
+    is_success = False
+    if notes:
+        version_service = VersionService()
+        version_service.put_version_note(version_id, {"notes": notes})
+        is_success = True
+    return jsonify({"success": is_success})

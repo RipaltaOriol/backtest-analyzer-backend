@@ -1,3 +1,4 @@
+from app.controllers.FilterController import get_filter_options_v2
 from app.controllers.PDFController import get_file
 from app.controllers.SetupController import (
     delete_setup,
@@ -13,9 +14,11 @@ from app.controllers.SetupController import (
     get_setup_row,
     get_setups,
     get_statistics,
+    get_version_note,
     post_setup,
     put_setup,
     put_setup_row,
+    put_version_note,
 )
 from flask import Blueprint
 from flask_jwt_extended import jwt_required
@@ -71,6 +74,13 @@ setup_bp.route("/<version_id>/calendar/statistics", methods=["GET"])(
 )
 
 # Version Trades
+setup_bp.route("/<version_id>/notes", methods=["GET"])(jwt_required()(get_version_note))
+setup_bp.route("/<version_id>/notes", methods=["PUT"])(jwt_required()(put_version_note))
+
+setup_bp.route("/<version_id>/filter-options", methods=["GET"])(
+    jwt_required()(get_filter_options_v2)
+)
+
 setup_bp.route("/<version_id>/open-trades", methods=["GET"])(
     jwt_required()(get_open_trades)
 )

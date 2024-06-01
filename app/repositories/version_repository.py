@@ -22,6 +22,12 @@ class VersionRepository:
         ).save()
 
     @staticmethod
+    def update_version_by_id(**kwargs) -> None:
+        id = kwargs.pop("id", None)
+        if id:
+            Setup.objects(id=id).update(**kwargs)
+
+    @staticmethod
     def get_versions_by_account(account_id):
         return Setup.objects(documentId=account_id)
 

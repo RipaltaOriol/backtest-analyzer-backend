@@ -75,7 +75,7 @@ def test_win_rate(stats_service):
     wins = stats_service.count_wins(data)
 
     result = stats_service.compute_win_rate(wins, count)
-    assert result == 60.0, "Should calculate win rate correctly"
+    assert result == 0.600, "Should calculate win rate correctly"
 
 
 def test_calculate_expectancy(stats_service):

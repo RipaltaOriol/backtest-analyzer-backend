@@ -1,10 +1,19 @@
 from app.controllers.utils import from_df_to_db
+from app.repositories.version_repository import VersionRepository
+from app.services.filter_service import FilterService
 
 
 class VersionService:
-    def __init__(self, version_repsitory, filter_service):
-        self.version_repository = version_repsitory
-        self.filter_service = filter_service
+    def __init__(self):
+        self.version_repository = VersionRepository()
+        self.filter_service = FilterService()
+
+    def get_version_note(self, version_id) -> str:
+        version = self.version_repository.get_version_by_id(version_id)
+        return version.notes if version.notes else ""
+
+    def put_version_note(self, version_id, data) -> str:
+        self.version_repository.update_version_by_id(**{"id": version_id, **data})
 
     def update_version_from_account_without_filters(
         self, account_id, account_data, account_fields, filter_list

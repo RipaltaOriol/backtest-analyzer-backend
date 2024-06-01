@@ -1,10 +1,13 @@
+import logging
 from datetime import datetime, timedelta
 
+import numpy as np
 import pandas as pd
+from app.controllers.utils import parse_column_name
+from app.utils.custom_jsonizer import serialize_to_json
 
 
 class FilterService:
-
     # Define operations as a static class variable
     OPERATIONS = {
         "in": "filter_in",
@@ -15,6 +18,52 @@ class FilterService:
         "eq": "filter_eq",
         "ne": "filter_ne",
     }
+
+    def get_filter_options(self, df: pd.DataFrame):
+        """
+        Returns an array of filter options for columns in a DataFrame that meet specific criteria.
+        Includes error handling to manage issues with DataFrame processing or JSON serialization.
+        """
+        try:
+            df.replace({np.nan: None}, inplace=True)
+            options = {
+                col: self.generate_filter_option(col, df[col])
+                for col in df.columns
+                if col.startswith("col_")
+            }
+            json_options = serialize_to_json(
+                options
+            )  # Use the abstracted JSON conversion function
+            return json_options, None
+
+        except Exception as e:
+            # Handle general errors that could occur during option generation or serialization
+            error_message = f"Failed to retrieve filter options due to: {str(e)}"
+            logging.err(error_message)
+            return None, error_message
+
+    def generate_filter_option(self, column_name, column_data):
+        """
+        Generates a filter option dictionary for a specified DataFrame column based on its type and prefix.
+        """
+        option = {
+            "id": column_name,
+            "name": parse_column_name(column_name),
+            "type": "number" if column_data.dtype in ["float64", "int64"] else "string",
+        }
+        if column_name.startswith("col_m_"):
+            option["values"] = (
+                list(column_data.dropna().unique())
+                if option["type"] == "string"
+                else None
+            )
+        elif column_name.startswith("col_d_"):
+            option["type"] = "date"
+        elif column_name == "col_p":
+            option["values"] = list(column_data.dropna().unique().astype(str))
+        elif column_name == "col_d":
+            option["values"] = ["Long", "Short"]
+        return option
 
     def apply_filter(self, df, filter_obj) -> None:
         """

@@ -55,14 +55,13 @@ class StatisticsService:
 
     @staticmethod
     def compute_win_rate(wins, total, round_decimals: int = 4):
-        win_rate = (wins / total) * 100 if total > 0 else 0
+        win_rate = wins / total if total > 0 else 0
         return round(win_rate, round_decimals)
 
     @staticmethod
     def calculate_expectancy(
         win_rate, average_win, average_loss, round_decimals: int = 2
     ):
-        win_rate = win_rate / 100
         expectancy = (win_rate * average_win) - ((1 - win_rate) * abs(average_loss))
         return round(expectancy, round_decimals)
 
